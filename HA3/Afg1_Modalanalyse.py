@@ -20,7 +20,7 @@ tdm = 2  # Tensor-Dimension für 2D-Probleme
 def analysis():
     E = 210e9  # E-Modul in Pa
     nu = 0.3
-    rho = 7850.0  # Dichte in kg/m^3
+    rho = 11503.0  # Dichte in kg/m^3
 
     F = 1000.0  # Gesamtkraft in N
     ndf = 2  # Anzahl der Freiheitsgrade pro Knoten
@@ -370,12 +370,19 @@ def analysis():
             f"lumped = {f_l_top[i]:.4f}"
         )
 
+    
+
     # Statische Lösung
     du = torch.linalg.solve(K_tilde, rsd)
     u += du
     u = free_mask.mul(u) + drlt_mask.mul(drlt_vals)
     fext = K * u
     frea = fext - fvol - fsur
+
+
+
+    print("Gesamtmasse:" , torch.sum(M) / ndm, "kg")
+    print("Gesamtmasse analytisch:" , width*height*length*rho, "mm^2")
 
     # ==========================================
     # [Änderung 3] Abbildung 2: Modenformen
@@ -436,3 +443,4 @@ if __name__ == "__main__":
     analysis()
     end_perfcount = timemodule.perf_counter()
     print("Elapsed = {}s".format((end_perfcount - start_perfcount)))
+

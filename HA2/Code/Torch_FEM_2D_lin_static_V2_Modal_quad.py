@@ -13,13 +13,16 @@ toplot = True
 
 tdm = 2  # Tensor dimension for 2D problems
 
-
 def analysis():
     E = 210e9  # E-Modul in Pa (210000 MPa)
     nu = 0.3
     rho = 7850.0  # Dichte in kg/m^3
 
     F = 1000.0  # Gesamtkraft in N
+    f_DOF = 0  # Kraft in (0-x) (1-y)-Richtung
+
+
+
     ndf = 2  # Anzahl der Freiheitsgrade pro Knoten
     ndm = 2  # 2D-Problem (2 Raumdimensionen) Number of dimensions
 
@@ -96,12 +99,12 @@ def analysis():
     )  # Flatten der Liste und in Tensor umwandeln
 
     # Querkraft am rechten Rand (x=length)
-    total_force = -F / width  # Kraft pro Meter Breite [N/m]
+    total_force = F / width  # Kraft pro Meter Breite [N/m]
     right_nodes = torch.where(x[:, 0] == length)[
         0
     ]  # x[:,0] ist die x-Koordinate aller Knoten, wo x = length & [0] gibt die Indizes der Knoten zurück
     force_per_node = total_force / len(right_nodes)  # Kraft pro Knoten am rechten Rand
-    neum_list = [[node_idx, 1, force_per_node] for node_idx in right_nodes]
+    neum_list = [[node_idx, f_DOF, force_per_node] for node_idx in right_nodes]
     neum = torch.tensor(neum_list)
 
     ############ Identity tensors ###########
@@ -519,11 +522,11 @@ def analysis():
     print(x_disped.size())
 
     voigt = torch.tensor([[0, 0], [1, 1], [2, 2], [0, 1], [0, 2], [1, 2]])
-    # --- ANPASSUNG: Plot-Titel ändern, um Verschiebungen statt Schubspannungen anzuzeigen ---
+    # --- ANPASSUNG: Plot-Titel ändern, um Scherspannungen anstatt von-Mises anzuzeigen ---
     plot_titles = [
         "Spannung XX",
         "Spannung YY",
-        "Von-Mises-Spannung",
+        "Scherspannung XY",
         "Verschiebung u_x",
         "Verschiebung u_y",
         "Dehnung XX",
@@ -577,15 +580,6 @@ def analysis():
 
                 s11, s22, s12 = stre[0, 0], stre[1, 1], stre[0, 1]
                 s33 = 0.0  # Annahme für ebenen Spannungszustand
-                sigma_v = torch.sqrt(
-                    0.5
-                    * (
-                        (s11 - s22) ** 2
-                        + (s22 - s33) ** 2
-                        + (s33 - s11) ** 2
-                        + 6 * (s12**2)
-                    )
-                )
 
                 # --- ANPASSUNG: Logik zur Auswahl der Plot-Werte ---
                 title = plot_titles[i]
@@ -593,8 +587,8 @@ def analysis():
                     stre_val = stre[0, 0]
                 elif title == "Spannung YY":
                     stre_val = stre[1, 1]
-                elif title == "Von-Mises-Spannung":
-                    stre_val = sigma_v
+                elif title == "Scherspannung XY":
+                    stre_val = s12
                 elif title == "Dehnung XX":
                     stre_val = eps[0, 0]
                 else:

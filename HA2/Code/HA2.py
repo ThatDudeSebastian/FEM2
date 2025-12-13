@@ -29,7 +29,7 @@ def analysis():
 
     global tdm
     ###### Geometrie: Balkennetzes ######
-    length = 1  # m
+    length = 9  # m
     height = 0.1 # m
     width = 0.1  # m (für Kraftberechnung, nicht für 2D-Netz)
 
