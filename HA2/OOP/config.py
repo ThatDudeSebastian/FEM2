@@ -7,7 +7,7 @@ torch.set_default_dtype(DEFAULT_DTYPE)
 torch.set_num_threads(TORCH_THREADS)
 
 # Element Type Selection
-USE_Q8 = True  # True for Q8 (8-node quadratic), False for Q4 (4-node linear)
+USE_Q8 = False  # True for Q8 (8-node quadratic), False for Q4 (4-node linear)
 
 # Parameters
 E = 210e9  # E-Modul in Pa (210000 MPa)
@@ -28,7 +28,7 @@ WIDTH = 0.1  # m
 
 # Mesh density
 NX = 20  # Elements in x-direction
-NY = 2   # Elements in y-direction
+NY = 2  # Elements in y-direction
 
 # Loads / BCs
 # total line load in N per meter width applied on right edge, positive downward
