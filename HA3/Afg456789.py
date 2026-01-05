@@ -433,15 +433,18 @@ def get_load_curve(scenario='ramp'):
         times = torch.linspace(0, 5, 21, dtype=torch.double)
         factors = torch.linspace(0, 1, 21, dtype=torch.double)
     elif scenario == 'cycle':
-        # More steps for stability in plasticity
-        times = torch.linspace(0, 5, 201, dtype=torch.double)
-        steps = 101
-        f1 = torch.linspace(0, 1, steps)
-        f2 = torch.linspace(1, -1, 2*steps - 1) # Full cycle to compression
-        # Simple cycle 0 -> 1 -> 0
-        f1 = torch.linspace(0, 1, 101)
-        f2 = torch.linspace(1, 0, 101)
-        factors = torch.cat((f1, f2[1:]))
+        # Cycle with Start -> Max -> Hold -> Unload
+        # 2s Load -> 1s Hold -> 2s Unload
+        times = torch.linspace(0, 5, 251, dtype=torch.double)
+        factors = torch.zeros_like(times)
+        
+        mask_load = times <= 2.0
+        mask_hold = (times > 2.0) & (times <= 3.0)
+        mask_unload = times > 3.0
+        
+        factors[mask_load] = times[mask_load] / 2.0
+        factors[mask_hold] = 1.0
+        factors[mask_unload] = 1.0 - (times[mask_unload] - 3.0) / 2.0
     elif scenario == 'step':
         # Finer steps for dynamics
         times = torch.linspace(0, 2, 1001, dtype=torch.double) # dt = 0.002
@@ -450,6 +453,10 @@ def get_load_curve(scenario='ramp'):
     return times, factors
 
 def run_all_tasks():
+    # --- Configuration ---
+    PLOT_PERFECT_PLASTICITY = True  # Set to True to include Perfect Plasticity in runs and plots
+    # ---------------------
+
     x, conn = get_crane_geometry()
     
     drlt_bcs = [[0,0], [0,1], [1,0], [1,1]]
@@ -484,10 +491,11 @@ def run_all_tasks():
     plt.ylabel("Stress [MPa]")
     plt.savefig("Task4_Stress.png")
 
-    print("\n--- Running Task 5 (Perfect Plasticity) ---")
-    model_t5 = PerfectPlasticity(E=210e9, Area=required_area, Sy=960e6)
-    solver = FEMSolver(x, conn, model_t5)
-    _ = solver.solve(times, factors, drlt_bcs, neum_bcs, visualize=True)
+    if PLOT_PERFECT_PLASTICITY:
+        print("\n--- Running Task 5 (Perfect Plasticity) ---")
+        model_t5 = PerfectPlasticity(E=210e9, Area=required_area, Sy=960e6)
+        solver = FEMSolver(x, conn, model_t5)
+        _ = solver.solve(times, factors, drlt_bcs, neum_bcs, visualize=True)
     
     print("\n--- Running Task 6 (Linear Hardening) ---")
     model_t6 = LinearHardening(E=210e9, Area=required_area, Sy=960e6, H=2e9)
@@ -518,11 +526,13 @@ def run_all_tasks():
     
     print("\n--- Running Task 9 (Comparison) ---")
     times_cyc, factors_cyc = get_load_curve('cycle')
-    models = [
-        Hooke(E=210e9, Area=required_area),
-        PerfectPlasticity(E=210e9, Area=required_area, Sy=960e6),
-        LinearHardening(E=210e9, Area=required_area, Sy=960e6, H=2e9)
-    ]
+    models = []
+    models.append(Hooke(E=210e9, Area=required_area))
+    
+    if PLOT_PERFECT_PLASTICITY:
+        models.append(PerfectPlasticity(E=210e9, Area=required_area, Sy=960e6))
+        
+    models.append(LinearHardening(E=210e9, Area=required_area, Sy=960e6, H=2e9))
     results_comp = []
     
     for m in models:
@@ -530,11 +540,64 @@ def run_all_tasks():
         solver = FEMSolver(x, conn, m)
         r = solver.solve(times_cyc, factors_cyc, drlt_bcs, neum_bcs)
         results_comp.append((m.name, r))
+
+        if m.name == "LinearHardening":
+            print("Plotting Residual Plastic Strain for LinearHardening...")
+            plt.figure(figsize=(12, 8))
+            ax = plt.gca()
+            ax.set_aspect('equal')
+            
+            # Get final deformed shape
+            u_final = solver.u.detach().cpu().numpy()
+            nodes_final = x.cpu().numpy() + u_final.reshape(-1, 2)
+            
+            # Get plastic strains
+            plastic_strains = []
+            max_eps_p = 0.0
+            for e in range(solver.nel):
+                hist = solver.history[e]
+                ep = hist.get('eps_p', torch.tensor(0.0)).item()
+                plastic_strains.append(ep)
+                max_eps_p = max(max_eps_p, abs(ep))
+            
+            # Plot
+            norm = plt.Normalize(vmin=0, vmax=max(1e-9, max_eps_p))
+            cmap = plt.cm.plasma 
+            
+            for i in range(solver.nel):
+                n_idx = conn[i].cpu().numpy()
+                p1 = nodes_final[n_idx[0]]
+                p2 = nodes_final[n_idx[1]]
+                
+                val = abs(plastic_strains[i])
+                color = cmap(norm(val))
+                
+                plt.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color, linewidth=3)
+                
+            plt.scatter(nodes_final[:,0], nodes_final[:,1], c='k', s=20, zorder=5)
+            
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+            cbar.set_label('Accumulated Plastic Strain [-]')
+            
+            plt.title(f"Task 9: Residual Plastic Stain (Linear Hardening)\nMax Eps_p: {max_eps_p:.4e}")
+            plt.grid(True, alpha=0.3)
+            plt.savefig("Task9_LinearHardening_ResidualPlasticStrain.png")
+            # Clear memory
+            plt.close()
     
     if len(results_comp[0][1]['strain_history']) > 0:
-        peak_idx = 25 
-        strains_at_peak = results_comp[0][1]['strain_history'][peak_idx]
+        # Identify index of maximum load (peak response)
+        # Use the last model (Linear Hardening) as reference to find peak displacement index
+        ref_res = results_comp[-1][1]
+        peak_idx = np.argmax(ref_res['u_max'])
+        
+        # Identify element with maximum strain at peak
+        strains_at_peak = ref_res['strain_history'][peak_idx]
         max_e_idx = np.argmax(np.abs(strains_at_peak))
+        
+        print(f"Plotting comparison for Element {max_e_idx} (Max Strain at Peak Load)")
         
         plt.figure(figsize=(15, 5))
         
