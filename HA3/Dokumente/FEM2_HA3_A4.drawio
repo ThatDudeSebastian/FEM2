@@ -1,0 +1,81 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0" version="29.2.9">
+  <diagram name="Seite-1" id="fpgI0HvXMy96NtvN3VVE">
+    <mxGraphModel dx="1722" dy="966" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="1" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="inXG3LqTZQpUffECrr8B-49" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Start: Initialisierung" vertex="1">
+          <mxGeometry height="54" width="204" x="135" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-50" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Simulation 1: Hooke-Modell mit $$A = 20\ cm²$$" vertex="1">
+          <mxGeometry height="78" width="260" x="107" y="124" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-51" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Ermittlung: Maximale Spannung $$\sigma_{max}$$" vertex="1">
+          <mxGeometry height="54" width="296" x="89" y="252" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-52" parent="1" style="rhombus;strokeWidth=2;whiteSpace=wrap;" value="Entspricht $$\sigma_{max}$$ der Zielspannung?" vertex="1">
+          <mxGeometry height="278" width="278" x="98" y="356" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-53" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Berechnung neue Fläche:$$ A_{neu} = A \cdot \frac{\sigma_{max}}{\sigma_{ziel}}$$" vertex="1">
+          <mxGeometry height="102" width="260" x="20" y="708" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-54" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Update Materialmodell: $$A = A_{neu}$$" vertex="1">
+          <mxGeometry height="78" width="260" x="20" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-55" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Simulation 2: Verifikationslauf" vertex="1">
+          <mxGeometry height="78" width="260" x="20" y="988" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-56" parent="1" style="whiteSpace=wrap;strokeWidth=2;" value="Ende: Maximale Spannung erreicht Zielwert" vertex="1">
+          <mxGeometry height="78" width="260" x="107" y="1116" as="geometry" />
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-57" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-49" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-50" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-58" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-50" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-51" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-59" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-51" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-52" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-60" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-52" style="curved=1;startArrow=none;endArrow=block;exitX=0.25;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-53" value="Nein">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="671" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-61" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-53" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-54" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-62" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-54" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-55" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-63" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-55" style="curved=1;startArrow=none;endArrow=block;exitX=0.5;exitY=1;entryX=0.3;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-56" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="1091" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="inXG3LqTZQpUffECrr8B-64" edge="1" parent="1" source="inXG3LqTZQpUffECrr8B-52" style="curved=1;startArrow=none;endArrow=block;exitX=0.74;exitY=1;entryX=0.7;entryY=0;rounded=0;" target="inXG3LqTZQpUffECrr8B-56" value="Ja">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="323" y="671" />
+              <mxPoint x="323" y="1091" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
