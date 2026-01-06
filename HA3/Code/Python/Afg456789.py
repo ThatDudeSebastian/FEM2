@@ -5,6 +5,12 @@ import numpy as np
 import copy
 import os
 
+# material parameters
+E = 220e9 # Pa 
+R_p02 = 974e6 # Pa Streckgrenze
+R_m = 1070e6 # Pa Zugfestigkeit
+Area = 0.002 # m^2
+
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -464,9 +470,9 @@ def run_all_tasks():
     neum_bcs = [[15, 1, load_val], [16, 1, load_val]]
 
     print("\n--- Running Task 4 (Hooke Sizing) ---")
-    target_stress = 1000e6
-    current_area = 0.002
-    model_t4 = Hooke(E=210e9, Area=current_area)
+    target_stress = R_m
+    current_area = Area
+    model_t4 = Hooke(E=E, Area=current_area)
     times, factors = get_load_curve('ramp')
     solver = FEMSolver(x, conn, model_t4)
     # Enable visualization for the first run!
@@ -493,12 +499,12 @@ def run_all_tasks():
 
     if PLOT_PERFECT_PLASTICITY:
         print("\n--- Running Task 5 (Perfect Plasticity) ---")
-        model_t5 = PerfectPlasticity(E=210e9, Area=required_area, Sy=960e6)
+        model_t5 = PerfectPlasticity(E=E, Area=required_area, Sy=R_p02)
         solver = FEMSolver(x, conn, model_t5)
         _ = solver.solve(times, factors, drlt_bcs, neum_bcs, visualize=True)
     
     print("\n--- Running Task 6 (Linear Hardening) ---")
-    model_t6 = LinearHardening(E=210e9, Area=required_area, Sy=960e6, H=2e9)
+    model_t6 = LinearHardening(E=E, Area=required_area, Sy=R_p02, H=2e9)
     solver = FEMSolver(x, conn, model_t6)
     _ = solver.solve(times, factors, drlt_bcs, neum_bcs, visualize=True)
 
@@ -513,7 +519,7 @@ def run_all_tasks():
 
     print("\n--- Running Task 8 (Dynamics) ---")
     times_dyn, factors_dyn = get_load_curve('step')
-    model_t8 = LinearHardening(E=210e9, Area=required_area, Sy=960e6, H=2e9)
+    model_t8 = LinearHardening(E=E, Area=required_area, Sy=R_p02, H=2e9)
     solver_dyn = FEMSolver(x, conn, model_t8, bearing_damping=True)
     res_t8 = solver_dyn.solve(times_dyn, factors_dyn, drlt_bcs, neum_bcs, dynamic=True, visualize=True)
     
@@ -527,12 +533,12 @@ def run_all_tasks():
     print("\n--- Running Task 9 (Comparison) ---")
     times_cyc, factors_cyc = get_load_curve('cycle')
     models = []
-    models.append(Hooke(E=210e9, Area=required_area))
+    models.append(Hooke(E=E, Area=required_area))
     
     if PLOT_PERFECT_PLASTICITY:
-        models.append(PerfectPlasticity(E=210e9, Area=required_area, Sy=960e6))
+        models.append(PerfectPlasticity(E=E, Area=required_area, Sy=R_p02))
         
-    models.append(LinearHardening(E=210e9, Area=required_area, Sy=960e6, H=2e9))
+    models.append(LinearHardening(E=E, Area=required_area, Sy=R_p02, H=2e9))
     results_comp = []
     
     for m in models:
