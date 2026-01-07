@@ -15,9 +15,9 @@ tdm = 2 # Tensor dimension for 2D problems
 
 
 def analysis():
-    E = 210e9  # E-Modul in Pa (210000MPa)
+    E = 220e9  # E-Modul in Pa (210000MPa)
     nu = 0.3
-    rho = 7850.0  # Dichte in kg/m^3
+    rho = 11503.0  # Dichte in kg/m^3
 
     F = 1000.0  # Gesamtkraft in N
     ndf = 2 # Anzahl der Freiheitsgrade pro Knoten
