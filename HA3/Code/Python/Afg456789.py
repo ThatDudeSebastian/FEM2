@@ -5,7 +5,7 @@ import numpy as np
 import copy
 import os
 
-# material parameters
+# material parameters S960QL / 1.8933
 E = 220e9 # Pa 
 R_p02 = 974e6 # Pa Streckgrenze
 R_m = 1070e6 # Pa Zugfestigkeit

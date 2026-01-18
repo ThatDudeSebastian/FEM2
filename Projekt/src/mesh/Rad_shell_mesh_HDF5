@@ -1,0 +1,414 @@
+-------------------------------------------------------
+Version       : 4.14.1
+License       : GNU General Public License
+Build OS      : Windows64
+Build date    : 20250902
+Build host    : gmsh.info
+Build options : 64Bit ALGLIB[contrib] ANN[contrib] Bamg Blas[petsc] Blossom Cgns DIntegration DomHex Eigen[contrib] Fltk Gmm[contrib] Hxt Jpeg Kbipack Lapack[petsc] MathEx[contrib] Med Mesh Metis[contrib] Mmg Mpeg Netgen Nii2mesh NoSocklenT ONELAB ONELABMetamodel OpenCASCADE OpenCASCADE-CAF OpenGL OpenMP OptHom PETSc Parser Plugins Png Post QuadMeshingTools QuadTri Solver TetGen/BR TinyXML2[contrib] Untangle Voro++[contrib] WinslowUntangler Zlib tinyobjloader
+FLTK version  : 1.3.11
+PETSc version : 3.15.0 (real arithmtic)
+OCC version   : 7.8.1
+MED version   : 4.1.0
+Packaged by   : nt authority system
+Web site      : https://gmsh.info
+Issue tracker : https://gitlab.onelab.info/gmsh/gmsh/issues
+-------------------------------------------------------
+Info    : Running 'C:\GMSH\gmsh-4.14.1-Windows64\gmsh.exe' [Gmsh 4.14.1, 1 node, max. 1 thread]
+Info    : Started on Sun Jan 18 22:50:06 2026
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5.cgns'...
+Error   : CGNS error The file C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5.cgns was written with a more recent version of the CGNS library.  You must update your CGNS library before trying to read this file.
+Error   : Error loading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5.cgns'
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5.cgns'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_ADF.cgns'...
+Error   : CGNS error The file C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_ADF.cgns was written with a more recent version of the CGNS library.  You must update your CGNS library before trying to read this file.
+Error   : Error loading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_ADF.cgns'
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_ADF.cgns'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh'...
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 1: syntax error (()
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (Ñ)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (™)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (9)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error ()
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (Ñ)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error ()
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (3)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (Ð)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (\)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (>)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (Û)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (Ù)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (/)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (Î)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (%)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (.)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (@)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (#)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error ({)
+Error   : 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh', line 14: syntax error (‡)
+Error   : Too many errors: aborting parser...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.msh'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'...
+Info    :  - Label 'Shapes/Rad' (2D)
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'
+Info    : Meshing 1D...
+Info    : Meshing curve 1 (Circle)
+Info    : Meshing curve 2 (Circle)
+Info    : Done meshing 1D (Wall 0.000194073s, CPU 0s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Transfinite)
+Error   : Surface 1 is transfinite but has 2 corners
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Done meshing 2D (Wall 0.0055232s, CPU 0s)
+Info    : 83 nodes 168 elements
+Error   : ------------------------------
+Error   : Mesh generation error summary
+Error   :     0 warnings
+Error   :     1 error
+Error   : Check the full log for details
+Error   : ------------------------------
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Transfinite)
+Error   : Surface 1 is transfinite but has 2 corners
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Done meshing 2D (Wall 0.00538611s, CPU 0s)
+Info    : 83 nodes 168 elements
+Error   : ------------------------------
+Error   : Mesh generation error summary
+Error   :     0 warnings
+Error   :     1 error
+Error   : Check the full log for details
+Error   : ------------------------------
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'...
+Info    :  - Label 'Shapes/Rad' (2D)
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'
+Info    : Meshing 1D...
+Info    : Meshing curve 1 (Circle)
+Info    : Meshing curve 2 (Circle)
+Info    : Done meshing 1D (Wall 0.000153065s, CPU 0s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Blossom: 212 internal 32 closed
+Info    : Blossom recombination completed (Wall 0.00324321s, CPU 0s): 73 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.742646, min Q = 0.509806
+Info    : Done meshing 2D (Wall 0.00916505s, CPU 0s)
+Info    : 89 nodes 107 elements
+Info    : Writing 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.msh'...
+Info    : Done writing 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.msh'
+Info    : Writing 'C:\Users\Sebastian\AppData\Roaming/gmsh-options'...
+Info    : Done writing 'C:\Users\Sebastian\AppData\Roaming/gmsh-options'
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Blossom: 212 internal 32 closed
+Info    : Blossom recombination completed (Wall 0.00326705s, CPU 0s): 73 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.742646, min Q = 0.509806
+Info    : Done meshing 2D (Wall 0.0091629s, CPU 0s)
+Info    : 89 nodes 107 elements
+Element 80:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 13 42 87 14
+ Volume: 10756.3186353
+ Barycenter: (-359.83137841, -47.637240325, 0)
+ Edge length: min = 91.6972839718 max = 109.642001465
+ Quality: gamma = 0.925334407701
+ SICN range: 0.983415038176 0.996152247867
+ SIGE range: 0.99313006074 0.99871527128
+ Inner / outer radius: 49.8452344484 / 1
+Element 39:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 87 42 61 59
+ Volume: 7530.62478558
+ Barycenter: (-262.869483211, -37.5169982022, 0)
+ Edge length: min = 79.1598337751 max = 91.6972839718
+ Quality: gamma = 0.944316040905
+ SICN range: 0.990161376548 0.997733641132
+ SIGE range: 0.996177098881 0.998518776827
+ Inner / outer radius: 42.4894995605 / 1
+Info    : Optimizing high-order mesh...
+Warning : Applying high-order mesh optimizer to mesh with linear elements
+Info    : Optimizing mesh...
+Info    : Computing connectivity and bad elements for entity 1...
+Info    : Starting patch generation from 0 bad elements...
+Info    : Constructing 0 primary patches
+Info    : Computing patch connectivity...
+Info    : Identifying groups of primary patches...
+Info    : Merging primary patches into 0 patches...
+Info    : Computing boundaries for 0 patches...
+Info    : Generated 0 patches
+Info    : Optimization succeeded
+Info    : Done optimizing mesh (0 s)
+Info    : Done optimizing high-order mesh (0 s)
+Info    : Optimizing high-order mesh...
+Warning : Applying high-order mesh optimizer to mesh with linear elements
+Info    : Optimizing mesh...
+Info    : Computing connectivity and bad elements for entity 1...
+Info    : Starting patch generation from 0 bad elements...
+Info    : Constructing 0 primary patches
+Info    : Computing patch connectivity...
+Info    : Identifying groups of primary patches...
+Info    : Merging primary patches into 0 patches...
+Info    : Computing boundaries for 0 patches...
+Info    : Generated 0 patches
+Info    : Optimization succeeded
+Info    : Done optimizing mesh (0 s)
+Info    : Done optimizing high-order mesh (0 s)
+Info    : Optimizing high-order mesh...
+Warning : Applying high-order mesh optimizer to mesh with linear elements
+Info    : Optimizing mesh...
+Info    : Computing connectivity and bad elements for entity 1...
+Info    : Starting patch generation from 0 bad elements...
+Info    : Constructing 0 primary patches
+Info    : Computing patch connectivity...
+Info    : Identifying groups of primary patches...
+Info    : Merging primary patches into 0 patches...
+Info    : Computing boundaries for 0 patches...
+Info    : Generated 0 patches
+Info    : Optimization succeeded
+Info    : Done optimizing mesh (0 s)
+Info    : Done optimizing high-order mesh (0 s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Blossom: 212 internal 32 closed
+Info    : Blossom recombination completed (Wall 0.00321722s, CPU 0s): 73 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.742646, min Q = 0.509806
+Info    : Done meshing 2D (Wall 0.00917292s, CPU 0s)
+Info    : 89 nodes 107 elements
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.000966787s, CPU 0s)
+Info    : Done refining mesh (Wall 0.00103211s, CPU 0s)
+Element 100:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 156 81 157 160
+ Volume: 1693.23537664
+ Barycenter: (144.062049177, 267.040065111, 0)
+ Edge length: min = 40.4333135852 max = 43.9789217983
+ Quality: gamma = 0.845947100716
+ SICN range: 0.970307194922 0.983220258136
+ SIGE range: 0.970864047274 0.9857347352
+ Inner / outer radius: 19.7817020374 / 1
+Element 100:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 156 81 157 160
+ Volume: 1693.23537664
+ Barycenter: (144.062049177, 267.040065111, 0)
+ Edge length: min = 40.4333135852 max = 43.9789217983
+ Quality: gamma = 0.845947100716
+ SICN range: 0.970307194922 0.983220258136
+ SIGE range: 0.970864047274 0.9857347352
+ Inner / outer radius: 19.7817020374 / 1
+Element 140:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 159 83 200 203
+ Volume: 1544.7643045
+ Barycenter: (182.025333484, 193.614056376, 0)
+ Edge length: min = 37.2925407565 max = 43.6671557679
+ Quality: gamma = 0.820538700213
+ SICN range: 0.957909877686 0.996892178059
+ SIGE range: 0.960529420861 0.996893313927
+ Inner / outer radius: 19.0454611617 / 1
+Element 139:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 82 159 203 202
+ Volume: 1318.99104601
+ Barycenter: (210.370232503, 220.131072797, 0)
+ Edge length: min = 31.1790216617 max = 40.5549738988
+ Quality: gamma = 0.854413269691
+ SICN range: 0.954950155473 0.996892178059
+ SIGE range: 0.973964867181 0.999990801375
+ Inner / outer radius: 16.7545182716 / 1
+Element 207:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 109 187 256 255
+ Volume: 1317.09508203
+ Barycenter: (210.18391894, 82.0695846223, 0)
+ Edge length: min = 32.2182991219 max = 39.4202235056
+ Quality: gamma = 0.907330782772
+ SICN range: 0.982720754709 0.994286660878
+ SIGE range: 0.98942418717 0.998721997144
+ Inner / outer radius: 17.7534604863 / 1
+Element 87:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 111 144 148 147
+ Volume: 1319.36586576
+ Barycenter: (171.987498988, -23.8625407404, 0)
+ Edge length: min = 34.7186425349 max = 38.0695801203
+ Quality: gamma = 0.942555644993
+ SICN range: 0.994384600401 0.998301741033
+ SIGE range: 0.995931729868 0.999801209245
+ Inner / outer radius: 17.6350821113 / 1
+Element 207:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 109 187 256 255
+ Volume: 1317.09508203
+ Barycenter: (210.18391894, 82.0695846223, 0)
+ Edge length: min = 32.2182991219 max = 39.4202235056
+ Quality: gamma = 0.907330782772
+ SICN range: 0.982720754709 0.994286660878
+ SIGE range: 0.98942418717 0.998721997144
+ Inner / outer radius: 17.7534604863 / 1
+Element 207:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 109 187 256 255
+ Volume: 1317.09508203
+ Barycenter: (210.18391894, 82.0695846223, 0)
+ Edge length: min = 32.2182991219 max = 39.4202235056
+ Quality: gamma = 0.907330782772
+ SICN range: 0.982720754709 0.994286660878
+ SIGE range: 0.98942418717 0.998721997144
+ Inner / outer radius: 17.7534604863 / 1
+Element 264:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 211 112 262 279
+ Volume: 1461.72508413
+ Barycenter: (-111.073752585, 345.657061307, 0)
+ Edge length: min = 33.1490175846 max = 44.3073174639
+ Quality: gamma = 0.652496435492
+ SICN range: 0.851154932392 0.998829124064
+ SIGE range: 0.854682524989 0.99943654461
+ Inner / outer radius: 17.9361886592 / 1
+Element 241:
+ Quadrilateral 4 (MSH type 3, dimension 2, order 1, partition 0)
+ Nodes: 271 47 46 241
+ Volume: 2255.39795532
+ Barycenter: (357.710432734, 168.823068664, 0)
+ Edge length: min = 41.7058377669 max = 54.9386285533
+ Quality: gamma = 0.680935864353
+ SICN range: 0.863303255882 0.9846423379
+ SIGE range: 0.877013936007 0.990173490537
+ Inner / outer radius: 22.6217431969 / 1
+Info    : Edges: 552 inside, 64 boundary, 0 selected
+Info    : Edges: 1168 inside, 64 boundary, 0 selected
+Info    : Edges: 1784 inside, 64 boundary, 0 selected
+Info    : Edges: 2400 inside, 64 boundary, 0 selected
+Info    : Edges: 3016 inside, 64 boundary, 0 selected
+Info    : Edges: 3632 inside, 64 boundary, 0 selected
+Info    : Edges: 4248 inside, 64 boundary, 0 selected
+Info    : Edges: 4864 inside, 64 boundary, 0 selected
+Info    : Edges: 5480 inside, 64 boundary, 0 selected
+Info    : Edges: 6096 inside, 64 boundary, 0 selected
+Info    : Edges: 6712 inside, 64 boundary, 0 selected
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'...
+Info    :  - Label 'Shapes/Rad' (2D)
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'
+Info    : Meshing 1D...
+Info    : Meshing curve 1 (Circle)
+Info    : Meshing curve 2 (Circle)
+Info    : Done meshing 1D (Wall 0.000216007s, CPU 0s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Blossom: 212 internal 32 closed
+Info    : Blossom recombination completed (Wall 0.00323701s, CPU 0s): 73 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.742646, min Q = 0.509806
+Info    : Done meshing 2D (Wall 0.0091269s, CPU 0s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.000787973s, CPU 0s)
+Info    : Done refining mesh (Wall 0.000830889s, CPU 0s)
+Info    : 324 nodes 358 elements
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Blossom: 793 internal 64 closed
+Info    : Blossom recombination completed (Wall 0.00816298s, CPU 0s): 272 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.779815, min Q = 0.471747
+Info    : Done meshing 2D (Wall 0.021472s, CPU 0.015625s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.00192261s, CPU 0s)
+Info    : Done refining mesh (Wall 0.00202107s, CPU 0s)
+Info    : 1152 nodes 1218 elements
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'...
+Info    :  - Label 'Shapes/Rad' (2D)
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'
+Info    : Meshing 1D...
+Info    : Meshing curve 1 (Circle)
+Info    : Meshing curve 2 (Circle)
+Info    : Done meshing 1D (Wall 0.000169992s, CPU 0s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Blossom: 212 internal 32 closed
+Info    : Blossom recombination completed (Wall 0.00324202s, CPU 0.015625s): 73 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.742646, min Q = 0.509806
+Info    : Done meshing 2D (Wall 0.00915289s, CPU 0.015625s)
+Info    : 89 nodes 107 elements
+Info    : Recombining 2D mesh...
+Info    : Blossom recombination completed (Wall 0.00167274s, CPU 0s): 73 quads, 0 triangles, 0 invalid quads, 0 quads with Q < 0.1, avg Q = 0.750164, min Q = 0.506552
+Info    : Done recombining 2D mesh (Wall 0.00170922s, CPU 0s)
+Info    : Optimizing mesh (Laplace2D)...
+Info    : Done optimizing mesh (Wall 0.00461078s, CPU 0s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.000888824s, CPU 0s)
+Info    : Done refining mesh (Wall 0.000960827s, CPU 0s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.00205898s, CPU 0s)
+Info    : Done refining mesh (Wall 0.00218391s, CPU 0s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.00610685s, CPU 0.015625s)
+Info    : Done refining mesh (Wall 0.00651813s, CPU 0.015625s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.0215542s, CPU 0.015625s)
+Info    : Done refining mesh (Wall 0.022944s, CPU 0.015625s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.0836809s, CPU 0.0625s)
+Info    : Done refining mesh (Wall 0.0901549s, CPU 0.0625s)
+Info    : Refining mesh...
+Info    : Meshing order 2 (curvilinear on)...
+Info    : Meshing curve 1 order 2
+Info    : Meshing curve 2 order 2
+Info    : Meshing surface 1 order 2
+Info    : Done meshing order 2 (Wall 0.346403s, CPU 0.328125s)
+Info    : Done refining mesh (Wall 0.374799s, CPU 0.359375s)
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'...
+Info    :  - Label 'Shapes/Rad' (2D)
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'
+Info    : Meshing 1D...
+Info    : Meshing curve 1 (Circle)
+Info    : Meshing curve 2 (Circle)
+Info    : Done meshing 1D (Wall 0.000168085s, CPU 0s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Done meshing 2D (Wall 0.00536394s, CPU 0s)
+Info    : 83 nodes 168 elements
+Info    : Edges: 6712 inside, 64 boundary, 0 selected
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'...
+Info    :  - Label 'Shapes/Rad' (2D)
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\CAD\Rad.stp.opt'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.geo'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\ANSYS\Rad_shell_mesh.geo'
+Info    : Reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5.geo'...
+Info    : Done reading 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5.geo'
+Info    : Writing 'C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\src\mesh\Rad_shell_mesh_HDF5'...
