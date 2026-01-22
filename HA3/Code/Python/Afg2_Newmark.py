@@ -11,7 +11,8 @@ torch.set_num_threads(16)
 disp_scaling = 100
 toplot = True
 
-tdm = 2 # Tensor dimension for 2D problems
+tdm = 2 # Tensor dimension for 2
+ D problems
 
 
 def analysis():

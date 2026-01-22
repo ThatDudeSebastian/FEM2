@@ -149,11 +149,8 @@ def load_custom_mesh_format(filepath, device="cpu"):
 
 
 if __name__ == "__main__":
-    # Test loading one of the provided files
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.abspath(
-        os.path.join(script_dir, "..", "pyfem_quad8", "kreisklein.msh")
-    )
+    path = os.path.join(script_dir, "mesh", "Rad.msh")
     try:
         x, conn, pt_sets, cell_sets = load_mesh(path)
         print(f"Successfully loaded {path}")
