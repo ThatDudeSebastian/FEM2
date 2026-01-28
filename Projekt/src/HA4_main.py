@@ -1,3 +1,6 @@
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 import torch
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -19,7 +22,7 @@ interactive_hover = True
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Standard-Datei (Newmark Task)
-mesh_file = os.path.abspath(os.path.join(script_dir, "..", "HA4_src_task", "newmark_task.inp"))
+mesh_file = os.path.abspath(os.path.join(script_dir, "HA4_src_task", "newmark_task.inp"))
 
 # 2. BENUTZER-DATEI (Hier einkommentieren, um die Standard-Datei zu überschreiben)
 # mesh_file = "/Users/hanne/Desktop/mein_neues_mesh.msh"
@@ -32,12 +35,16 @@ element_type = 'quad8'
 
 # --- Material Parameters ---
 # --- Material Parameters ---
-E = 220e9  # From Afg2_Newmark.py (210e9 -> 220e9)
+# --- Material Parameters ---
+E = 220e9
 nu = 0.3
-width = 0.00583 # From Afg2_Newmark.py (was 1.0). Important for stiffness scaling!
+width = 0.00583
+
+sigma_y = 350e6     # Fließspannung
+H = 1.0e9          # Isotrope Verfestigung
 
 # --- Force ---
-F_total = -1000.0 # From Afg2_Newmark.py (was -5 MN). 1000 N in Y (pointing down)
+F_total = -40000.0 # From Afg2_Newmark.py (was -5 MN). 1000 N in Y (pointing down)
 
 # ==========================================
 # ============ MESH LOADING ============
@@ -156,6 +163,41 @@ else:
 C4 = torch.zeros(2, 2, 2, 2); fac = E / (1 - nu**2)
 C4[0,0,0,0]=C4[1,1,1,1]=fac; C4[0,0,1,1]=C4[1,1,0,0]=fac*nu; C4[0,1,0,1]=C4[1,0,0,1]=C4[0,1,1,0]=C4[1,0,1,0]=E/(2*(1+nu))
 
+
+def von_mises_return(eps, state):
+    ep = state["ep"]
+    alpha = state["alpha"]
+
+    sig_trial = torch.tensordot(C4, eps-ep, dims=2)
+
+    I = torch.eye(2, device=eps.device)
+    s = sig_trial - torch.trace(sig_trial)/2 * I
+
+    seq = torch.sqrt(1.5*torch.sum(s*s))
+
+    f = seq - (sigma_y + H*alpha)
+
+    if f <= 0:
+        return sig_trial, C4, state
+
+    mu = E/(2*(1+nu))
+    dgamma = f/(3*mu+H)
+
+    n = s/seq
+    sig = sig_trial - 2*mu*dgamma*n
+
+    ep_new = ep + 1.5*dgamma*n
+    alpha_new = alpha + dgamma
+
+    Ct = C4 - (2*mu)**2/(3*mu+H)*(
+        torch.einsum("ij,kl->ijkl", n, n)
+    )
+
+    return sig, Ct, {"ep":ep_new, "alpha":alpha_new}
+
+state_gp = [[{"ep":torch.zeros(2,2),"alpha":0.0} for q in range(nqp)] for e in range(nel)]
+
+
 K = torch.zeros(nnp*ndf, nnp*ndf); f_ext = torch.zeros(nnp*ndf, 1)
 
 for el in range(nel):
@@ -204,31 +246,121 @@ for dof in floating_dofs_list:
 free_dofs = torch.nonzero(1.0 - drlt_mask)[:, 0]
 for bc in neum: f_ext[int(bc[0])*ndf + int(bc[1])] = bc[2]
 
-u = torch.zeros(nnp*ndf, 1); u[free_dofs] = torch.linalg.solve(K[free_dofs][:, free_dofs], f_ext[free_dofs])
+# ==========================================
+# ============ NONLINEAR SOLVER ============
+# ==========================================
 
-# Results per element
+n_steps = 20
+newton_tol = 1e-8
+newton_max = 30
+
+track_node = int(load_nodes[0])
+track_dof = track_node*ndf + 1
+
+disp_lin = []
+disp_pl = []
+load_hist = []
+
+u = torch.zeros(nnp*ndf,1)
+
+for step in range(1,n_steps+1):
+
+    fac = step/n_steps
+    print(f"\nSTEP {step}/{n_steps}")
+
+    f_ext = torch.zeros(nnp*ndf,1)
+    for bc in neum:
+        f_ext[int(bc[0])*ndf+int(bc[1])] = fac*bc[2]
+
+    for it in range(newton_max):
+
+        Kt = torch.zeros_like(K)
+        fint = torch.zeros_like(f_ext)
+
+        for el in range(nel):
+            n_idx = conn[el]; xe = x[n_idx].t()
+            edofs=[]
+            for n in n_idx: edofs.extend([int(n)*ndf,int(n)*ndf+1])
+            ue = u[edofs].reshape(-1,2).t()
+
+            Ke = torch.zeros(nen*ndf,nen*ndf)
+            fe = torch.zeros(nen*ndf,1)
+
+            for q in range(nqp):
+                N,gamma = get_shape_data(qpt[q],nen)
+                Je = xe.mm(gamma)
+                dv = torch.det(Je)*w8[q]*width
+                G = gamma.mm(torch.inverse(Je))
+
+                eps = 0.5*(ue.mm(G)+(ue.mm(G)).t())
+                sig,Ct,state_gp[el][q] = von_mises_return(eps,state_gp[el][q])
+
+                for A in range(nen):
+                    for B in range(nen):
+                        KAB = torch.tensordot(G[A],
+                                torch.tensordot(Ct,G[B],[[3],[0]]),[[0],[0]])
+                        Ke[A*ndf:A*ndf+2,B*ndf:B*ndf+2]+=dv*KAB
+
+                    fe[A*ndf:A*ndf+2,0] += dv * (sig @ G[A].unsqueeze(1)).squeeze()
+
+            idx=torch.tensor(edofs)
+            Kt[idx.unsqueeze(1),idx]+=Ke
+            fint[idx]+=fe
+
+        R = f_ext-fint
+        Rf = R[free_dofs]
+
+        if torch.norm(Rf)<newton_tol:
+            print(" converged")
+            break
+
+        du=torch.zeros_like(u)
+        du_f=torch.linalg.solve(Kt[free_dofs][:,free_dofs],Rf)
+        du[free_dofs]=du_f
+        u+=du
+
+    load_hist.append(fac*F_total)
+    disp_pl.append(u[track_dof].item())
+
+# linear reference
+u_lin=torch.zeros(nnp*ndf,1)
+for bc in neum: f_ext[int(bc[0])*ndf+int(bc[1])]=bc[2]
+u_lin[free_dofs]=torch.linalg.solve(K[free_dofs][:,free_dofs],f_ext[free_dofs])
+
+# ==========================================
+# ============ POSTPROCESS NONLINEAR =========
+# ==========================================
+
 element_results = {"svm": [], "u": []}
+
 for e in range(nel):
-    n_idx = conn[e]; xe = x[n_idx].t(); edofs = []
-    for n in n_idx: edofs.extend([int(n)*ndf, int(n)*ndf+1])
+    n_idx = conn[e]
+    xe = x[n_idx].t()
+    edofs = []
+    for n in n_idx:
+        edofs.extend([int(n)*ndf, int(n)*ndf+1])
+
     ue = u[edofs].reshape(-1, 2).t()
+
     N, gamma = get_shape_data(torch.tensor([0.0, 0.0]), nen)
-    Je = xe.mm(gamma); G = gamma.mm(torch.inverse(Je))
-    eps = 0.5 * (ue.mm(G) + (ue.mm(G)).t()); sig = torch.tensordot(C4, eps, dims=2)
-    svm = torch.sqrt(sig[0,0]**2 + sig[1,1]**2 - sig[0,0]*sig[1,1] + 3*sig[0,1]**2)
+    Je = xe.mm(gamma)
+    G = gamma.mm(torch.inverse(Je))
+
+    eps = 0.5 * (ue.mm(G) + (ue.mm(G)).t())
+    sig = torch.tensordot(C4, eps, dims=2)
+
+    svm = torch.sqrt(sig[0,0]**2 + sig[1,1]**2 
+                     - sig[0,0]*sig[1,1] 
+                     + 3*sig[0,1]**2)
+
     element_results["svm"].append(float(svm / 1e6))
-    element_results["u"].append(float(torch.norm(torch.mean(ue.t(), dim=0))) * 1000.0)
+    element_results["u"].append(float(torch.norm(torch.mean(ue.t(), dim=0))) * 1000)
 
-# Calculate and print maximums
-max_u = torch.max(torch.norm(u.reshape(-1, 2), dim=1)) * 1000.0 # mm
-max_svm = max(element_results["svm"]) # MPa
 
-print(f"{'='*30}")
-print(f"RESULTS SUMMARY (Static)")
-print(f"{'='*30}")
-print(f"Max Displacement: {max_u:.4f} mm")
-print(f"Max Von Mises:    {max_svm:.4f} MPa")
-print(f"{'='*30}")
+
+for i in range(1,n_steps+1):
+    disp_lin.append(i/n_steps*u_lin[track_dof].item())
+
 
 # ==========================================
 # ============ VISUALIZATION ============
@@ -331,5 +463,18 @@ def hover(event):
 
 if interactive_hover:
     fig.canvas.mpl_connect("motion_notify_event", hover)
+
+# checken ob pllasitizität eintritt    
+print("max plastic alpha:", max([state_gp[e][q]["alpha"] for e in range(nel) for q in range(nqp)]))
+
+plt.figure(figsize=(7,5))
+plt.plot(disp_lin,load_hist,'k--',label="linear")
+plt.plot(disp_pl,load_hist,'r',lw=2,label="plastisch")
+plt.xlabel("Verschiebung [m]")
+plt.ylabel("Last [N]")
+plt.title("Last–Verschiebungs–Kurve")
+plt.grid(True)
+plt.legend()
+plt.show()
 
 plt.tight_layout(); plt.show()
