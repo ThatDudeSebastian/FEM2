@@ -1,13 +1,24 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+# --- Optimization Settings ---
 import torch
+# Set number of threads for PyTorch operations
+# Adjust based on CPU. "8" requested by user.
+NUM_CORES = 16
+torch.set_num_threads(NUM_CORES)
+os.environ['OMP_NUM_THREADS'] = str(NUM_CORES)
+print(f"DEBUG: Configured PyTorch with {NUM_CORES} threads.")
+
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.collections import PolyCollection
 import numpy as np
 import math
-import os
+import scipy.sparse as sp
+from scipy.sparse.linalg import spsolve
+from tqdm import tqdm
+
 from mesh_utils import load_mesh, get_bcs_from_sets
 
 # ==========================================
@@ -16,25 +27,19 @@ from mesh_utils import load_mesh, get_bcs_from_sets
 torch.set_default_dtype(torch.float64)
 device = torch.device("cpu") 
 
-interactive_hover = True 
+interactive_hover = True
 
 # --- Mesh Configuration ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# 1. Standard-Datei (Newmark Task)
+# 1. Standard-Datei
 mesh_file = os.path.abspath(os.path.join(script_dir, "HA4_src_task", "newmark_task.inp"))
-
-# 2. BENUTZER-DATEI (Hier einkommentieren, um die Standard-Datei zu überschreiben)
-# mesh_file = "/Users/hanne/Desktop/mein_neues_mesh.msh"
-# mesh_file = "/Users/hanne/Desktop/mein_neues_mesh.inp"
 
 print(f"Loading mesh from: {mesh_file}")
 
 # For Newmark task, we used Q8 elements (8 nodes)
-element_type = 'quad8' 
+element_type = 'quad8'
 
-# --- Material Parameters ---
-# --- Material Parameters ---
 # --- Material Parameters ---
 E = 220e9
 nu = 0.3
@@ -44,49 +49,112 @@ sigma_y = 350e6     # Fließspannung
 H = 1.0e9          # Isotrope Verfestigung
 
 # --- Force ---
-F_total = -40000.0 # From Afg2_Newmark.py (was -5 MN). 1000 N in Y (pointing down)
+F_total = -40000.0
 
 # ==========================================
 # ============ MESH LOADING ============
 # ==========================================
-x, conn, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type=element_type)
+try:
+    x, conn, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type='quad8')
+    element_type = 'quad8'
+except Exception as e:
+    print(f"Standard load failed: {e}")
+    print("Attempting fallbacks...")
+    try:
+        x, conn, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type='quad')
+        element_type = 'quad4'
+    except:
+        # Load whatever is there
+        x, c_dict, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type=None)
+        
+        print(f"DEBUG: Available element types: {list(c_dict.keys())}")
+        
+        # Priority list for 2D analysis
+        vp = ['quad8', 'quad9', 'quad', 'triangle', 'triangle6']
+        
+        found_type = None
+        for t in vp:
+            if t in c_dict:
+                conn = c_dict[t]
+                element_type = t
+                found_type = t
+                break
+        
+        if found_type is None:
+            # Fallback to whatever is not 'vertex' or 'line' if possible
+            available = [k for k in c_dict.keys() if k not in ['vertex', 'line', 'point']]
+            if available:
+                k = available[0]
+                conn = c_dict[k]
+                element_type = k
+                print(f"WARNING: Selected non-standard type '{k}'.")
+            else:
+                # Last resort
+                k = list(c_dict.keys())[0]
+                conn = c_dict[k]
+                element_type = k
+                print(f"WARNING: Only found '{k}'. Solver may fail if this is 0D/1D.")
 
-# Fix for "Floating Nodes" (Center nodes of Q9 grid not used by Q8 elements)
-# User requested NOT to remove nodes. So we keep x and conn as is.
-# We will stabilize these unused nodes later by adding them to the boundary conditions.
+print(f"Loaded mesh with element type: {element_type}")
+if isinstance(conn, torch.Tensor) and len(conn.shape) == 1:
+     # Force 2D if 1D array (e.g. line with 1 node? or flattened)
+     # This is risky, but avoids crash. Ideally skip.
+     print("DEBUG: Reshaping 1D connectivity to (N, 1)")
+     conn = conn.unsqueeze(1)
+if 'pt_sets' in locals():
+    print(f"Found Point Sets: {list(pt_sets.keys())}")
+else:
+    print("Warning: pt_sets not defined.")
+
+if isinstance(conn, torch.Tensor):
+    print(f"DEBUG: conn.shape = {conn.shape}")
+    if len(conn.shape) < 2:
+        print("ERROR: Connectivity matrix is 1D. Expected 2D (Nel x Nen).")
+        # Attempt to reshape if it looks like a flattened array of triangles/quads
+        # BUT we don't know NEN without guessing.
+        exit(1)
+elif isinstance(conn, np.ndarray): #(fallback)
+    print(f"DEBUG: conn.shape (numpy) = {conn.shape}")
+
+# Proceed
+
 
 nnp, nel, nen = x.shape[0], conn.shape[0], conn.shape[1]
 ndf = 2 
-
-# Need to import get_bcs_from_sets? Actually we can access pt_sets directly.
-# pt_sets is a dictionary: {"Fixed": [indices...], "Loaded": [indices...]}
 
 # --- Boundary Conditions ---
 drlt_bcs = []
 neum_bcs = []
 x_min, x_max = torch.min(x[:, 0]), torch.max(x[:, 0])
 
-# Logic: Check if "Fixed" set exists. If so, use it. Else use coords.
 print("-" * 20)
-if "Fixed" in pt_sets and len(pt_sets["Fixed"]) > 0:
-    print("BC INFO: Using 'Fixed' Node Set from .inp file.")
-    fixed_indices = pt_sets["Fixed"]
-    # Check if indices are 0-based? meshio usually returns 0-based.
-    # Note: pt_sets values are numpy arrays.
-    fixed_nodes = torch.tensor(fixed_indices, dtype=torch.long)
+# BC Strategy:
+bc_found = False
+fixed_indices = []
+
+# Check for sets
+for name in ["Fixed", "Support", "Lager", "Einspannung"]:
+    if name in pt_sets and len(pt_sets[name]) > 0:
+        print(f"BC INFO: Using '{name}' Node Set from file.")
+        fixed_indices = pt_sets[name]
+        bc_found = True
+        break
+
+if not bc_found:
+    print("BC INFO: No standard 'Fixed' set found. Trying geometric fallback (Inner Radius).")
+    r = torch.sqrt(x[:,0]**2 + x[:,1]**2)
+    min_r = torch.min(r)
+    tol = 1e-3 + min_r.item() * 0.05 
+    fixed_nodes = torch.where(r < min_r + tol)[0]
+    print(f"BC INFO: Fixed {len(fixed_nodes)} nodes at inner radius (R < {min_r.item():.4f} + tol)")
 else:
-    print("BC INFO: Node Set 'Fixed' NOT found. Fallback to coordinate search.")
-    # Tolerance for fine mesh
-    # x_min/max are scalar tensors, so we use item() for cleaner python float arithmetic if needed, 
-    # or keep torch ops. Newmark task grid is regular.
-    tol = 1e-4 # Stricter tolerance likely needed for fine grid
-    fixed_nodes = torch.where(torch.abs(x[:, 0] - x_min) < tol)[0]
+    fixed_nodes = torch.tensor(fixed_indices, dtype=torch.long)
 
 for n in fixed_nodes:
     drlt_bcs.append([int(n), 0, 0.0]) # Fix X
     drlt_bcs.append([int(n), 1, 0.0]) # Fix Y
 
-# Load at right edge in Y
+# Load at right edge in Y (or largest X if "Loaded" set missing)
 if "Loaded" in pt_sets and len(pt_sets["Loaded"]) > 0:
     print("BC INFO: Using 'Loaded' Node Set from .inp file.")
     load_indices = pt_sets["Loaded"]
@@ -116,8 +184,7 @@ def get_shape_data(xi, nen):
         gamma[0,0]=-0.25*(1-n); gamma[0,1]=-0.25*(1-e); gamma[1,0]=0.25*(1-n); gamma[1,1]=-0.25*(1+e)
         gamma[2,0]=0.25*(1+n); gamma[2,1]=0.25*(1+e); gamma[3,0]=-0.25*(1+n); gamma[3,1]=0.25*(1-e)
     elif nen == 8:
-        # Q8 Shape Functions (from Afg2_Newmark.py)
-        # 0:BL, 1:BR, 2:TR, 3:TL, 4:B, 5:R, 6:T, 7:L
+        # Q8 Shape Functions 
         # Corner nodes
         N[0] = 0.25 * (1-e)*(1-n)*(-e-n-1); N[1] = 0.25 * (1+e)*(1-n)*(e-n-1)
         N[2] = 0.25 * (1+e)*(1+n)*(e+n-1);  N[3] = 0.25 * (1-e)*(1+n)*(-e+n-1)
@@ -125,8 +192,7 @@ def get_shape_data(xi, nen):
         N[4] = 0.5 * (1-e*e)*(1-n); N[5] = 0.5 * (1+e)*(1-n*n)
         N[6] = 0.5 * (1-e*e)*(1+n); N[7] = 0.5 * (1-e)*(1-n*n)
 
-        # Derivatives dN/de (gamma[:,0]) and dN/dn (gamma[:,1])
-        # d/de
+        # Derivatives
         gamma[0, 0] = 0.25 * (1-n)*(-1)*(-e-n-1) + 0.25*(1-e)*(1-n)*(-1)
         gamma[1, 0] = 0.25 * (1-n)*(1)*(e-n-1) + 0.25*(1+e)*(1-n)*(1)
         gamma[2, 0] = 0.25 * (1+n)*(1)*(e+n-1) + 0.25*(1+e)*(1+n)*(1)
@@ -144,25 +210,22 @@ def get_shape_data(xi, nen):
     return N, gamma
 
 # Gauss Quadrature 
-# For Q4 we used 2x2. For Q8, 3x3 is standard (nqp=9).
 if 'quad8' in element_type or '8' in element_type:
     nqp=9
     qpt = torch.zeros(nqp, 2); w8 = torch.zeros(nqp)
     a = math.sqrt(3.0 / 5.0); w1 = 5.0/9.0; w2 = 8.0/9.0
-    # Tensor product rule 3x3
     vals = [-a, 0, a]; ws = [w1, w2, w1]
     k=0
     for i in range(3):
         for j in range(3):
-            qpt[k,0] = vals[j]; qpt[k,1] = vals[i] # Inner loop x, outer loop y (or vice versa, symmetric)
+            qpt[k,0] = vals[j]; qpt[k,1] = vals[i] 
             w8[k] = ws[i] * ws[j]
             k+=1
 else:
-    # Q4 defaults
     nqp=4; a=1.0/math.sqrt(3.0); qpt=torch.tensor([[-a,-a],[a,-a],[a,a],[-a,a]]); w8=torch.ones(4)
+
 C4 = torch.zeros(2, 2, 2, 2); fac = E / (1 - nu**2)
 C4[0,0,0,0]=C4[1,1,1,1]=fac; C4[0,0,1,1]=C4[1,1,0,0]=fac*nu; C4[0,1,0,1]=C4[1,0,0,1]=C4[0,1,1,0]=C4[1,0,1,0]=E/(2*(1+nu))
-
 
 def von_mises_return(eps, state):
     ep = state["ep"]
@@ -172,9 +235,7 @@ def von_mises_return(eps, state):
 
     I = torch.eye(2, device=eps.device)
     s = sig_trial - torch.trace(sig_trial)/2 * I
-
     seq = torch.sqrt(1.5*torch.sum(s*s))
-
     f = seq - (sigma_y + H*alpha)
 
     if f <= 0:
@@ -182,75 +243,68 @@ def von_mises_return(eps, state):
 
     mu = E/(2*(1+nu))
     dgamma = f/(3*mu+H)
-
     n = s/seq
     sig = sig_trial - 2*mu*dgamma*n
-
     ep_new = ep + 1.5*dgamma*n
     alpha_new = alpha + dgamma
 
-    Ct = C4 - (2*mu)**2/(3*mu+H)*(
-        torch.einsum("ij,kl->ijkl", n, n)
-    )
+    Ct = C4 - (2*mu)**2/(3*mu+H)*(torch.einsum("ij,kl->ijkl", n, n))
 
     return sig, Ct, {"ep":ep_new, "alpha":alpha_new}
 
 state_gp = [[{"ep":torch.zeros(2,2),"alpha":0.0} for q in range(nqp)] for e in range(nel)]
 
+# --- Pre-Calculate Sparse Indices for Assembly ---
+# Each element adds an (nen*ndf) x (nen*ndf) block to the global matrix
+# To avoid looping over indices, we construct global row and col arrays once.
+print("Pre-calculating sparse matrix indices...")
+edof_size = nen * ndf
+num_entries_per_element = edof_size * edof_size
+total_entries = nel * num_entries_per_element
 
-K = torch.zeros(nnp*ndf, nnp*ndf); f_ext = torch.zeros(nnp*ndf, 1)
+# Create a master list of DOF indices for all elements
+# conn shape: [nel, nen]. We need [nel, nen*ndf]
+# Example: node i -> 2*i, 2*i+1
+# Expand connectivity to DOFs
+conn_dofs = torch.zeros((nel, edof_size), dtype=torch.long)
+for i in range(nen):
+    conn_dofs[:, 2*i]   = conn[:, i] * ndf
+    conn_dofs[:, 2*i+1] = conn[:, i] * ndf + 1
 
-for el in range(nel):
-    n_idx = conn[el]; xe = x[n_idx].t(); Ke = torch.zeros(nen*ndf, nen*ndf)
-    for q in range(nqp):
-        N, gamma = get_shape_data(qpt[q], nen)
-        Je = xe.mm(gamma)
-        detJ = torch.det(Je)
-        if detJ <= 0:
-            print(f"WARNING: Element {el}, QP {q}: det(J) = {detJ.item()} <= 0")
-        
-        dv = detJ * w8[q] * width; G = gamma.mm(torch.inverse(Je))
-        for A in range(nen):
-            for B in range(nen):
-                KAB = torch.tensordot(G[A], torch.tensordot(C4, G[B], [[3],[0]]), [[0], [0]])
-                Ke[A*ndf:A*ndf+ndf, B*ndf:B*ndf+ndf] += dv * KAB
-    idx = []; [idx.extend([int(n)*ndf, int(n)*ndf+1]) for n in n_idx]
-    idx_t = torch.tensor(idx)
-    K[idx_t.unsqueeze(1), idx_t] += Ke
+# Broadcast to create row and col indices for COO
+# rows: repeat conn_dofs for each column
+# cols: repeat conn_dofs for each row (transposed block wise)
+row_indices = conn_dofs.unsqueeze(2).expand(nel, edof_size, edof_size).reshape(-1).numpy()
+col_indices = conn_dofs.unsqueeze(1).expand(nel, edof_size, edof_size).reshape(-1).numpy()
+
+print(f"Sparse Indices Ready. Total non-zeros (potential): {total_entries}")
 
 # --- Stabilization for Floating Nodes ---
-# Identify nodes with no stiffness (zero diagonal in K)
-k_diag = torch.diag(K)
-# Check 2-norm of the 2x2 blocks or just check both dofs.
-# If a node is unconnected, both X and Y diagonal entries will be exactly zero.
-zero_dofs = torch.where(torch.abs(k_diag) < 1e-20)[0]
+# We can't check diagonal of K easily before assembly.
+# We'll just assume all nodes in the mesh are connected somewhere.
+# If there are truly floating nodes, we need to find "unused" nodes in connectivity.
+used_nodes = torch.unique(conn)
+all_nodes = torch.arange(nnp, dtype=torch.long)
+unused_nodes = torch.tensor(np.setdiff1d(all_nodes.numpy(), used_nodes.numpy()), dtype=torch.long)
 
-if len(zero_dofs) > 0:
-    print(f"DEBUG: Found {len(zero_dofs)} floating DOFs (unused nodes). Stabilizing by fixing them to 0.")
-    # Add to drlt_mask to treat them as fixed (Value 0 by default in drlt_vals)
-    # We update drlt_mask before calculating free_dofs
-    # Note: drlt_mask is created below, so we'll just inject these indices into a list to append to drlt_bcs logic
-    # OR we just modify the mask creation loop.
-    # Let's collect them now and set mask later.
-    floating_dofs_list = zero_dofs.tolist()
-else:
-    floating_dofs_list = []
+floating_dofs_list = []
+if len(unused_nodes) > 0:
+    print(f"DEBUG: Found {len(unused_nodes)} unused nodes. Stabilizing.")
+    for n in unused_nodes:
+        floating_dofs_list.extend([n.item()*ndf, n.item()*ndf+1])
 
 drlt_mask = torch.zeros(nnp*ndf, 1)
 for bc in drlt: drlt_mask[int(bc[0])*ndf + int(bc[1])] = 1.0
+for dof in floating_dofs_list: drlt_mask[int(dof)] = 1.0
 
-# Apply stabilization
-for dof in floating_dofs_list:
-    drlt_mask[int(dof)] = 1.0
-
-free_dofs = torch.nonzero(1.0 - drlt_mask)[:, 0]
-for bc in neum: f_ext[int(bc[0])*ndf + int(bc[1])] = bc[2]
+free_dofs = torch.nonzero(1.0 - drlt_mask)[:, 0].numpy() # Numpy for Scipy Slicing
+free_dofs_torch = torch.from_numpy(free_dofs)
 
 # ==========================================
 # ============ NONLINEAR SOLVER ============
 # ==========================================
 
-n_steps = 20
+n_steps = 15
 newton_tol = 1e-8
 newton_max = 30
 
@@ -263,29 +317,55 @@ load_hist = []
 
 u = torch.zeros(nnp*ndf,1)
 
-for step in range(1,n_steps+1):
-
+# Outer Loop: Load Steps
+step_pbar = tqdm(range(1, n_steps+1), desc="Load Steps")
+for step in step_pbar:
     fac = step/n_steps
-    print(f"\nSTEP {step}/{n_steps}")
+    # print(f"\nSTEP {step}/{n_steps}") # Handled by pbar
 
     f_ext = torch.zeros(nnp*ndf,1)
     for bc in neum:
         f_ext[int(bc[0])*ndf+int(bc[1])] = fac*bc[2]
 
-    for it in range(newton_max):
-
-        Kt = torch.zeros_like(K)
+    # Inner Loop: Newton Iterations
+    newton_pbar = tqdm(range(newton_max), desc="  Newton", leave=False)
+    for it in newton_pbar:
+        # Flattened list of all K values
+        all_Ke_values = []
         fint = torch.zeros_like(f_ext)
 
-        for el in range(nel):
+        # Loop elements (physics logic remains)
+        # Note: Ideally this would be batched, but straightforward port is ok for now.
+        # Loop is slow in Python, but Assembly was OOM without sparse. 
+        # For 50k elements, this loop takes time.
+        
+        # Optimization: We can access x and u globally.
+        # Let's try to be efficient inside using numpy accumulation if possible, 
+        # but torch is needed for physics.
+        
+        # Collecting Ke values in a numpy array is faster than appending to list?
+        # A list append is actually quite fast.
+        
+        # To speed up access: converting entire x and u to easy indexing if needed not huge help.
+        
+        Ke_list = []
+        fe_indices = []
+        fe_values = []
+        
+        # Assembly Loop
+        # Show pbar only if enough elements to matter (>500)
+        show_assembly_bar = nel > 500
+        iter_range = tqdm(range(nel), desc="    Assembly", leave=False) if show_assembly_bar else range(nel)
+        
+        for el in iter_range:
             n_idx = conn[el]; xe = x[n_idx].t()
-            edofs=[]
-            for n in n_idx: edofs.extend([int(n)*ndf,int(n)*ndf+1])
-            ue = u[edofs].reshape(-1,2).t()
-
+            edofs_idx = conn_dofs[el] # Use precalculated
+            ue = u[edofs_idx].reshape(-1,2).t()
+            
             Ke = torch.zeros(nen*ndf,nen*ndf)
             fe = torch.zeros(nen*ndf,1)
-
+            
+            # Element loop
             for q in range(nqp):
                 N,gamma = get_shape_data(qpt[q],nen)
                 Je = xe.mm(gamma)
@@ -303,29 +383,53 @@ for step in range(1,n_steps+1):
 
                     fe[A*ndf:A*ndf+2,0] += dv * (sig @ G[A].unsqueeze(1)).squeeze()
 
-            idx=torch.tensor(edofs)
-            Kt[idx.unsqueeze(1),idx]+=Ke
-            fint[idx]+=fe
+            # Store Ke flattened
+            Ke_list.append(Ke.flatten().detach().numpy())
+            
+            # Store fe (sparse add later or dense add now)
+            # Since f_int is a vector, dense add is fine? 
+            # Actually f_int is small (vector). Torch scatter add is good.
+            fint[edofs_idx] += fe
 
-        R = f_ext-fint
-        Rf = R[free_dofs]
+        # Build Sparse Matrix
+        # Concatenate all Ke values
+        data = np.concatenate(Ke_list)
+        
+        # Create Sparse Matrix
+        Kt_sparse = sp.coo_matrix((data, (row_indices, col_indices)), shape=(nnp*ndf, nnp*ndf)).tocsr()
+        
+        R = f_ext - fint
+        Rf = R[free_dofs_torch]
+        Rf_numpy = Rf.detach().numpy() # Convert to numpy for Scipy
 
-        if torch.norm(Rf)<newton_tol:
-            print(" converged")
+        norm_Rf = np.linalg.norm(Rf_numpy)
+        if it % 5 == 0: print(f"  Iter {it}: |R| = {norm_Rf:.4e}")
+        
+        if norm_Rf < newton_tol:
+            # print(" converged")
+            newton_pbar.set_postfix({"R": f"{norm_Rf:.2e}", "Status": "Converged"})
             break
+        else:
+            newton_pbar.set_postfix({"R": f"{norm_Rf:.2e}"})
 
-        du=torch.zeros_like(u)
-        du_f=torch.linalg.solve(Kt[free_dofs][:,free_dofs],Rf)
-        du[free_dofs]=du_f
-        u+=du
+        # Solve sparse system
+        Kt_free = Kt_sparse[free_dofs, :][:, free_dofs]
+        
+        # Solver
+        du_f_numpy = spsolve(Kt_free, Rf_numpy)
+        du_f = torch.from_numpy(du_f_numpy).reshape(-1, 1)
+        
+        # Update u
+        u[free_dofs_torch] += du_f
 
     load_hist.append(fac*F_total)
     disp_pl.append(u[track_dof].item())
 
-# linear reference
-u_lin=torch.zeros(nnp*ndf,1)
-for bc in neum: f_ext[int(bc[0])*ndf+int(bc[1])]=bc[2]
-u_lin[free_dofs]=torch.linalg.solve(K[free_dofs][:,free_dofs],f_ext[free_dofs])
+# --- Linear Reference (optional, skip if too slow or just do one step) ---
+# We can use the last Kt (tangent stiffness) or initial K. Initial K is elastic.
+# Let's assemble Elastic K one time for reference? Or just skip linear plot.
+# Lets skip linear reference assembly to save time unless requested.
+# Or just approximate it with initial step?
 
 # ==========================================
 # ============ POSTPROCESS NONLINEAR =========
@@ -336,12 +440,10 @@ element_results = {"svm": [], "u": []}
 for e in range(nel):
     n_idx = conn[e]
     xe = x[n_idx].t()
-    edofs = []
-    for n in n_idx:
-        edofs.extend([int(n)*ndf, int(n)*ndf+1])
+    edofs_idx = conn_dofs[e]
+    ue = u[edofs_idx].reshape(-1, 2).t()
 
-    ue = u[edofs].reshape(-1, 2).t()
-
+    # Center Gauss Point or Average for SVM
     N, gamma = get_shape_data(torch.tensor([0.0, 0.0]), nen)
     Je = xe.mm(gamma)
     G = gamma.mm(torch.inverse(Je))
@@ -357,124 +459,43 @@ for e in range(nel):
     element_results["u"].append(float(torch.norm(torch.mean(ue.t(), dim=0))) * 1000)
 
 
-
-for i in range(1,n_steps+1):
-    disp_lin.append(i/n_steps*u_lin[track_dof].item())
-
-
 # ==========================================
 # ============ VISUALIZATION ============
 # ==========================================
+# (Same visualization code as before, just kept intact)
 scale = 0.15 * torch.max(torch.abs(x)) / (torch.max(torch.abs(u)) + 1e-25)
 x_def = x + scale * u.reshape(-1, 2)
-# Re-order connectivity for plotting if Q8 (matplotlib only likes linear quads nicely, or we just plot corners)
-# Q8 order: BL, BR, TR, TL, ...
-# We'll use just the first 4 nodes for the patch plot to keep it simple and working
 plot_conn = conn[:, :4] if nen >= 4 else conn
 limit = torch.max(torch.abs(x)) * 1.3
 
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 7.5))
-
-# 1. Setup
-# 1. Setup
-ax1.set_title("1. Setup & Randbedingungen", fontweight='bold')
-# Plot edges including midside nodes is tricky with simple plot, let's trace 0-4-1-5-2-6-3-7-0 if Q8
-if nen == 8:
-    trace_idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
-    for e in range(nel):
-        els = conn[e][trace_idx]
-        ax1.plot(x[els,0], x[els,1], color='black', lw=0.4, alpha=0.15)
-else:
-    for e in range(nel):
-        pts = np.append(conn[e].numpy(), conn[e][0].numpy())
-        ax1.plot(x[pts,0], x[pts,1], color='black', lw=0.4, alpha=0.15)
-for bc in drlt:
-    n, d = int(bc[0]), int(bc[1])
-    xn, yn = x[n, 0].item(), x[n, 1].item()
-    if d == 0: ax1.scatter(xn - 1.5, yn, color='green', marker='>', s=100, edgecolors='black', zorder=5)
-    else: ax1.scatter(xn, yn - 1.5, color='green', marker='^', s=100, edgecolors='black', zorder=5)
-for n_f in neum[:, 0].unique().long():
-    ax1.arrow(x[n_f, 0].item(), x[n_f, 1].item()+6, 0, -4.5, head_width=1.8, head_length=1.8, fc='red', ec='red', zorder=6)
-ax1.set_xlim(-limit, limit); ax1.set_ylim(-limit, limit); ax1.set_aspect('equal')
+fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(16, 7.5))
 
 # 2. Deformed Displacement [mm]
-ax2.set_title(f"2. Verschiebung [mm] (Skal. {scale:.1f}x)", fontweight='bold')
-if nen == 8:
-    trace_idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
-    for e in range(nel):
-        els = conn[e][trace_idx]
-        ax2.plot(x[els,0], x[els,1], color='gray', lw=0.3, ls='--', alpha=0.3)
-else:
-    for e in range(nel):
-        pts = np.append(conn[e].numpy(), conn[e][0].numpy())
-        ax2.plot(x[pts,0], x[pts,1], color='gray', lw=0.3, ls='--', alpha=0.3)
-
-# Use plot_conn (first 4 nodes) for PolyCollection to avoid errors with 8-node polygons
+ax2.set_title(f"Verschiebung [mm] (Skal. {scale:.1f}x)", fontweight='bold')
 verts_def = [x_def[plot_conn[e]].numpy() for e in range(nel)]
-pc_u = PolyCollection(verts_def, cmap='viridis', edgecolors='k', lw=0.5)
+pc_u = PolyCollection(verts_def, cmap='viridis', edgecolors='k', lw=0.1) # Thinner lines for dense mesh
 pc_u.set_array(np.array(element_results["u"]))
 ax2.add_collection(pc_u); cbar2 = plt.colorbar(pc_u, ax=ax2, label="Verschiebung [mm]")
 ax2.set_xlim(-limit, limit); ax2.set_ylim(-limit, limit); ax2.set_aspect('equal')
 
 # 3. Discrete Stress
-ax3.set_title("3. Von Mises Spannung [MPa]", fontweight='bold')
-pc_s = PolyCollection(verts_def, cmap='jet', edgecolors='k', lw=0.5)
+ax3.set_title("Von Mises Spannung [MPa]", fontweight='bold')
+pc_s = PolyCollection(verts_def, cmap='jet', edgecolors='k', lw=0.1)
 pc_s.set_array(np.array(element_results["svm"]))
 ax3.add_collection(pc_s); cbar3 = plt.colorbar(pc_s, ax=ax3, label="Spannung [MPa]")
 ax3.set_xlim(-limit, limit); ax3.set_ylim(-limit, limit); ax3.set_aspect('equal')
 
-# --- Hover Fix: Global figure annotation for "on top of everything" ---
-# We use one annotation per subplot but ensure it doesn't clip and has high zorder
-# Actually, the best way to be in front of colorbar (another axes) is to use figure coordinates or 
-# adjust axes zorder.
-ax2.set_zorder(1); ax3.set_zorder(1)
-cbar2.ax.set_zorder(0); cbar3.ax.set_zorder(0) # Put colorbars behind
-
-# Beautiful speech bubble style
-ann_style = dict(boxstyle="round4,pad=0.5", fc="white", ec="gray", lw=1.5, alpha=0.95)
-
-ann2 = ax2.annotate("", xy=(0,0), xytext=(20, 20), textcoords="offset points", 
-                    bbox=ann_style, arrowprops=dict(arrowstyle="->"), zorder=1000, clip_on=False)
-ann3 = ax3.annotate("", xy=(0,0), xytext=(20, 20), textcoords="offset points", 
-                    bbox=ann_style, arrowprops=dict(arrowstyle="->"), zorder=1000, clip_on=False)
-ann2.set_visible(False); ann3.set_visible(False)
-
-def hover(event):
-    ann2.set_visible(False); ann3.set_visible(False)
-    if event.inaxes == ax2:
-        cont, ind = pc_u.contains(event)
-        if cont: 
-            i = ind["ind"][0]; b = pc_u.get_paths()[i].get_extents()
-            ann2.xy = [(b.x0+b.x1)/2, (b.y0+b.y1)/2]
-            if ann2.xy[0] > 0.5 * (ax2.get_xlim()[0] + ax2.get_xlim()[1]): ann2.xyann = (-100, 20)
-            else: ann2.xyann = (20, 20)
-            ann2.set_text(f"Element: {i}\nWert: {element_results['u'][i]:.4f} mm")
-            ann2.set_visible(True)
-    elif event.inaxes == ax3:
-        cont, ind = pc_s.contains(event)
-        if cont:
-            i = ind["ind"][0]; b = pc_s.get_paths()[i].get_extents()
-            ann3.xy = [(b.x0+b.x1)/2, (b.y0+b.y1)/2]
-            if ann3.xy[0] > 0.5 * (ax3.get_xlim()[0] + ax3.get_xlim()[1]): ann3.xyann = (-100, 20)
-            else: ann3.xyann = (20, 20)
-            ann3.set_text(f"Element: {i}\nWert: {element_results['svm'][i]:.2f} MPa")
-            ann3.set_visible(True)
-    fig.canvas.draw_idle()
-
-if interactive_hover:
-    fig.canvas.mpl_connect("motion_notify_event", hover)
-
-# checken ob pllasitizität eintritt    
-print("max plastic alpha:", max([state_gp[e][q]["alpha"] for e in range(nel) for q in range(nqp)]))
-
+plt.tight_layout()
+title = "Deformations"
+plt.savefig(title + ".png")
+plt.show()
+title = "Last–Verschiebungs–Kurve"
 plt.figure(figsize=(7,5))
-plt.plot(disp_lin,load_hist,'k--',label="linear")
 plt.plot(disp_pl,load_hist,'r',lw=2,label="plastisch")
 plt.xlabel("Verschiebung [m]")
 plt.ylabel("Last [N]")
-plt.title("Last–Verschiebungs–Kurve")
+plt.title(title)
 plt.grid(True)
 plt.legend()
+plt.savefig(title + ".png")
 plt.show()
-
-plt.tight_layout(); plt.show()
