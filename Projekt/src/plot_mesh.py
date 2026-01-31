@@ -74,13 +74,106 @@ def plot_mesh(filepath):
         print("No standard 2D elements found to plot (triangle/quad). Plotting node scatter only.")
         ax.scatter(x, y, s=2, c='k', marker='.')
     
+    # --- EXTRACT ALL BC NODE SETS ---
+    # Merge from point_sets and cell_sets (where 1D elements are tagged)
+    all_bc_sets = {}
+    
+    # 1. Start with explicit point sets
+    for name, indices in mesh.point_sets.items():
+        all_bc_sets[name] = set(indices)
+        
+    # 2. Add from cell sets (e.g. physical groups on lines)
+    for name, block_masks in mesh.cell_sets.items():
+        node_indices = set()
+        # block_masks is a list of masks/indices, one for each cell block
+        for block_idx, mask in enumerate(block_masks):
+            if mask is None or len(mask) == 0:
+                continue
+                
+            # Check if mask is an array-like object
+            import numpy as np
+            mask_arr = np.array(mask)
+            
+            if mask_arr.size == 0:
+                continue
+                
+            block = mesh.cells[block_idx]
+            
+            try:
+                if mask_arr.dtype == bool:
+                    # Boolean mask: must match block length
+                    if len(mask_arr) != len(block.data):
+                        # Some versions might have global masks, skip or handle
+                        continue
+                    if any(mask_arr):
+                        tagged_nodes = block.data[mask_arr].flatten()
+                        node_indices.update(tagged_nodes)
+                else:
+                    # Integer index array: must be within bounds [0, len(block.data)-1]
+                    valid_mask = mask_arr[mask_arr < len(block.data)]
+                    if len(valid_mask) > 0:
+                        tagged_nodes = block.data[valid_mask].flatten()
+                        node_indices.update(tagged_nodes)
+            except Exception as e:
+                print(f"    Warning: Could not process mask for group '{name}' in block {block_idx}: {e}")
+                continue
+        
+        if node_indices:
+            if name in all_bc_sets:
+                all_bc_sets[name].update(node_indices)
+            else:
+                all_bc_sets[name] = node_indices
+
+    # filter to only Fixed and Loaded as requested
+    filtered_bc_sets = {}
+    for name, nodes in all_bc_sets.items():
+        if name.lower() in ['fixed', 'loaded']:
+            filtered_bc_sets[name] = nodes
+    all_bc_sets = filtered_bc_sets
+
+    # --- PLOT BOUNDARY CONDITIONS ---
+    bc_markers = {'Fixed': 'ro', 'Loaded': 'y^', 'Support': 'rs', 'Einspannung': 'rd'}
+    
+    print("\nBoundary Conditions (Filtered: Fixed, Loaded):")
+    for set_name, nodes in all_bc_sets.items():
+        node_indices = list(nodes)
+        if len(node_indices) == 0:
+            continue
+            
+        print(f"  - Set: {set_name:<15} Nodes: {len(node_indices)}")
+        
+        # Determine format
+        fmt = 'ko' # Default black dots
+        marker_label = set_name
+        
+        for key, style in bc_markers.items():
+            if key.lower() in set_name.lower():
+                fmt = style
+                break
+                
+        # Sub-sample if too many nodes for visualization clarity
+        plot_indices = node_indices
+        if len(node_indices) > 500:
+            import numpy as np
+            plot_indices = np.random.choice(node_indices, 500, replace=False)
+            print(f"    (Visualizing 500/{len(node_indices)} nodes for '{set_name}')")
+
+        ax.plot(x[plot_indices], y[plot_indices], fmt, markersize=4, label=f"BC: {set_name}", zorder=10)
+        
+        # Add to handles for legend (ax.plot already handles this if label exists)
+    
     ax.autoscale()
     ax.set_aspect('equal')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     
-    if legend_handles:
-        ax.legend(handles=legend_handles)
+    # Update legend to include BCs
+    # Handles from PC patches + plot labels
+    handles, labels = ax.get_legend_handles_labels()
+    # Unique labels only
+    from collections import OrderedDict
+    by_label = OrderedDict(zip(labels, handles))
+    ax.legend(by_label.values(), by_label.keys(), loc='upper right', bbox_to_anchor=(1.15, 1))
     
     plt.title(f"Mesh: {os.path.basename(filepath)}\nNodes: {len(points)}")
     plt.grid(True, alpha=0.3)
@@ -90,12 +183,18 @@ def plot_mesh(filepath):
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_file = os.path.join(script_dir, "mesh", "Beam_Quad8.msh")
+    # Fix case sensitivity and default path
+    default_file = os.path.join(script_dir, "mesh", "Wheel_Refined.msh")
     
     if len(sys.argv) > 1:
         file_to_plot = sys.argv[1]
     else:
         file_to_plot = default_file
-        print(f"No file specified. Using default: {file_to_plot}")
+        if not os.path.exists(file_to_plot):
+             # Try other common names
+             alt = os.path.join(script_dir, "mesh", "Beam_Quad8.msh")
+             if os.path.exists(alt): file_to_plot = alt
+
+        print(f"No file specified. Using: {file_to_plot}")
     
     plot_mesh(file_to_plot)

@@ -33,7 +33,7 @@ interactive_hover = True
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Standard-Datei
-mesh_file = os.path.abspath(os.path.join(script_dir, "HA4_src_task", "newmark_task.inp"))
+mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Wheel_Refined.msh"))
 
 print(f"Loading mesh from: {mesh_file}")
 
@@ -128,41 +128,62 @@ neum_bcs = []
 x_min, x_max = torch.min(x[:, 0]), torch.max(x[:, 0])
 
 print("-" * 20)
-# BC Strategy:
-bc_found = False
-fixed_indices = []
+# --- Robust Boundary Condition Extraction ---
+def extract_nodes_from_sets(mesh_pt_sets, mesh_cell_sets, mesh_cells, target_names):
+    node_indices = set()
+    # 1. Check point sets
+    for name in target_names:
+        if name in mesh_pt_sets:
+            node_indices.update(mesh_pt_sets[name])
+    
+    # 2. Check cell sets (e.g. physical groups on lines)
+    if mesh_cell_sets:
+        for set_name, block_masks in mesh_cell_sets.items():
+            matches = any(tn.lower() in set_name.lower() for tn in target_names)
+            if matches:
+                for block_idx, mask in enumerate(block_masks):
+                    if mask is None or len(mask) == 0: continue
+                    mask_arr = np.array(mask)
+                    if mask_arr.size == 0: continue
+                    
+                    block = mesh_cells[block_idx]
+                    try:
+                        if mask_arr.dtype == bool:
+                            if len(mask_arr) == len(block.data) and any(mask_arr):
+                                node_indices.update(block.data[mask_arr].flatten())
+                        else:
+                            valid_mask = mask_arr[mask_arr < len(block.data)]
+                            if len(valid_mask) > 0:
+                                node_indices.update(block.data[valid_mask].flatten())
+                    except: continue
+    return list(node_indices)
 
-# Check for sets
-for name in ["Fixed", "Support", "Lager", "Einspannung"]:
-    if name in pt_sets and len(pt_sets[name]) > 0:
-        print(f"BC INFO: Using '{name}' Node Set from file.")
-        fixed_indices = pt_sets[name]
-        bc_found = True
-        break
-
-if not bc_found:
+# Assign BCs
+fixed_indices = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells if 'mesh_cells' in locals() else [], ["Fixed", "Support", "Lager", "Einspannung"])
+if not fixed_indices:
     print("BC INFO: No standard 'Fixed' set found. Trying geometric fallback (Inner Radius).")
     r = torch.sqrt(x[:,0]**2 + x[:,1]**2)
     min_r = torch.min(r)
     tol = 1e-3 + min_r.item() * 0.05 
     fixed_nodes = torch.where(r < min_r + tol)[0]
-    print(f"BC INFO: Fixed {len(fixed_nodes)} nodes at inner radius (R < {min_r.item():.4f} + tol)")
+    print(f"BC INFO: Fixed {len(fixed_nodes)} nodes at inner radius.")
 else:
     fixed_nodes = torch.tensor(fixed_indices, dtype=torch.long)
+    print(f"BC INFO: Fixed {len(fixed_nodes)} nodes from sets.")
 
 for n in fixed_nodes:
     drlt_bcs.append([int(n), 0, 0.0]) # Fix X
     drlt_bcs.append([int(n), 1, 0.0]) # Fix Y
 
-# Load at right edge in Y (or largest X if "Loaded" set missing)
-if "Loaded" in pt_sets and len(pt_sets["Loaded"]) > 0:
-    print("BC INFO: Using 'Loaded' Node Set from .inp file.")
-    load_indices = pt_sets["Loaded"]
-    load_nodes = torch.tensor(load_indices, dtype=torch.long)
-else:
+# Load
+load_indices = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells if 'mesh_cells' in locals() else [], ["Loaded"])
+if not load_indices:
     print("BC INFO: Node Set 'Loaded' NOT found. Fallback to coordinate search.")
     tol = 1e-4
     load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < tol)[0]
+else:
+    load_nodes = torch.tensor(load_indices, dtype=torch.long)
+    print(f"BC INFO: Loaded {len(load_nodes)} nodes from sets.")
 
 f_per_node = F_total / max(1, len(load_nodes))
 for n in load_nodes:
