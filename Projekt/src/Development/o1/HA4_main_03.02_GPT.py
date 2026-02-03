@@ -618,7 +618,6 @@ def cyclic_factor(step, n_steps_per_cycle):
 
 track_el = 0
 track_q = 0
-tracking_elem = nel - 1
 
 k_hist = []  # isotrope Variable k
 a_hist  = []  # kinematische Variable a
@@ -628,12 +627,7 @@ sig_yy_hist = []
 eps_eq_hist = []
 sig_eq_hist = []
 eps_p_eq_hist = []
-eps_p_eq_hist = []
 eps_p_xx_hist = []
-sig_1_hist = [] # Principal Stresses History
-sig_2_hist = []
-
-total_start_time = time.time()
 
 
 
@@ -916,42 +910,6 @@ while step <= n_steps:
             # sehr wichtig: neuen konvergierten Zustand als Startpunkt für das nächste Substep setzen
             state_gp_old = clone_state_gp(state_gp)
             u_old = u.clone()
-            
-            # --- TRACK STRESS PATH (Tracking Element) ---
-            # Extract state for Element 'tracking_elem' (the last one), QP 0
-            # Re-calculate stress from displacement (u) and state_new (state_gp)
-            
-            # Get displacement for tracking element
-            n_idx_tr = conn[tracking_elem]
-            # Gather flat, then reshape to (nen, ndf) -> (8,2)
-            dof_indices_tr = []
-            for n in n_idx_tr:
-                dof_indices_tr.extend([int(n)*ndf, int(n)*ndf+1])
-            ue_tr = u[dof_indices_tr].clone().reshape(nen, ndf)
-            
-            # QP 0
-            N_tr, gamma_tr = get_shape_data(qpt[0], nen) # using QP 0
-            xe_tr = x[n_idx_tr].t()
-            Je_tr = xe_tr.mm(gamma_tr)
-            G_tr = torch.linalg.solve(Je_tr.T, gamma_tr.T).T
-            
-            # grad_u = du/dX = ue.T * G  -> (2,8)*(8,2) = (2,2)
-            grad_u_tr = ue_tr.t().mm(G_tr)
-            eps_tr = 0.5 * (grad_u_tr + grad_u_tr.t())
-            
-            # Use CURRENT converged state (state_gp is the new one for next step, so it holds the just-converged updated vars)
-            st_tr_q0 = state_gp[tracking_elem][0] 
-            sig_tr, _, _ = von_mises_return(eps_tr, st_tr_q0)
-            
-            s11 = sig_tr[0,0].item()
-            s22 = sig_tr[1,1].item()
-            s12 = sig_tr[0,1].item()
-            s_avg = (s11 + s22) / 2.0
-            s_R = math.sqrt(((s11 - s22) / 2.0)**2 + s12**2)
-            # Append to history
-            sig_1_hist.append((s_avg + s_R) / 1e6)
-            sig_2_hist.append((s_avg - s_R) / 1e6)
-            # ---------------------------------------------
 
             # Ziel erreicht? -> globalen Step verlassen
             rem = fac_target - fac_conv
@@ -1075,10 +1033,6 @@ scale_auto = 0.5 * elem_size_approx / (torch.max(torch.abs(u)) + 1e-25)
 # Cap scale to avoid "explosion" if u is very small, but also limit it if u is large.
 scale = min(float(scale_auto), 50.0)
 print(f"Plotting: auto-calculated scale factor = {scale:.2f}")
-
-total_end_time = time.time()
-sim_duration = total_end_time - total_start_time
-print(f"TOTAL SIMULATION TIME: {sim_duration:.2f} s")
 
 x_def = x + scale * u.reshape(-1, 2)
 # Re-order connectivity for plotting if Q8 (matplotlib only likes linear quads nicely, or we just plot corners)
@@ -1272,21 +1226,10 @@ if len(k_hist) > 0:
 
     plt.plot(x0/1e6, y0/1e6, 'k--', lw=2.5, label="Initial (Yield)")
     plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.5, label="Aktuell (Hardened)")
-    
-    # Plot Stress Path Trajectory
-    if len(sig_1_hist) > 0:
-        plt.plot(sig_1_hist, sig_2_hist, 'b-', lw=1.5, alpha=0.7, label="Stress Path")
-        plt.plot(sig_1_hist[-1], sig_2_hist[-1], 'bo', markersize=6, label="Current State")
-    
     plt.xlabel(r"HS $\sigma_1$ [MPa]")
     plt.ylabel(r"HS $\sigma_2$ [MPa]")
     plt.title(f"Fließfläche im HS-Raum (r={r:.2f})")
-    plt.legend()
-    plt.grid(True)
-    plt.axis('equal')
-    
-    # Add Simulation Time Text
-    plt.figtext(0.5, 0.01, f"Simulation Duration: {sim_duration:.2f} s", ha="center", fontsize=9, bbox={"facecolor":"white", "alpha":0.5, "pad":3})
+    plt.grid(True); plt.legend(); plt.gca().set_aspect('equal','box')
     
     # Add origin crosshair
     plt.axhline(0, color='black', lw=1.0, alpha=0.3)
