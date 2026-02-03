@@ -137,9 +137,60 @@ else:
 # f_per_node = F_total / max(1, len(load_nodes))
 # for n in load_nodes:
 #     neum_bcs.append([int(n), 1, f_per_node])
-f_per_node = F_total / max(1, len(load_nodes))
-for n in load_nodes:
-    neum_bcs.append([int(n), 0, f_per_node])  # dof=0 => x
+# [V7 FIX] Q8 Consistent Nodal Loads (Simpson's Rule 1/6 : 4/6 : 1/6)
+# Uniform force on Q8 quadratic edge nodes causes distortion ("collapsed elements").
+# We must distribute F_total according to shape functions.
+if 'quad8' in element_type or nen == 8:
+    print("BC INFO: Calculating consistent nodal loads for Q8 elements...")
+    node_weights = torch.zeros(nnp)
+    
+    # Identify right edge elements
+    for e in range(nel):
+        n_idx = conn[e] # 0-7
+        # Right edge in local Q8 indexing (Counter-Clockwise from BL):
+        # 0(BL), 1(BR), 2(TR), 3(TL), 4(B), 5(R), 6(T), 7(L)
+        # Right edge nodes: 1 (Corner), 2 (Corner), 5 (Midside)
+        edge_nodes = [n_idx[1], n_idx[2], n_idx[5]]
+        
+        # Check if this edge is on the load boundary aka all nodes in load_nodes
+        # (We converted load_nodes to tensor earlier, let's use set for speed or just tensor checks)
+        # load_nodes is a tensor of indices.
+        
+        on_boundary = True
+        for en in edge_nodes:
+            if not torch.isin(en, load_nodes):
+                on_boundary = False
+                break
+        
+        if on_boundary:
+            # Add weights: Corners get 1, Midside gets 4
+            # Logic: Integral of N_i over edge length L_e. 
+            # int N_corner = L_e/6, int N_mid = 4L_e/6.
+            # We treat L_e as uniform.
+            node_weights[edge_nodes[0]] += 1.0
+            node_weights[edge_nodes[1]] += 1.0
+            node_weights[edge_nodes[2]] += 4.0
+
+    # Extract sum of weights for loaded nodes only
+    total_weight = torch.sum(node_weights[load_nodes])
+    if total_weight == 0:
+        print("WARNING: No Q8 boundary edges found matching load_nodes! Fallback to uniform.")
+        f_per_node = F_total / max(1, len(load_nodes))
+        for n in load_nodes:
+            neum_bcs.append([int(n), 0, f_per_node])
+    else:
+        print(f"BC INFO: Distributed Force using Q8 consistent weights (Total W={total_weight})")
+        for n in load_nodes:
+            w = node_weights[n]
+            if w > 0:
+                f_n = (w / total_weight) * F_total
+                neum_bcs.append([int(n), 0, float(f_n)])
+
+else:
+    # Linear elements / Fallback
+    f_per_node = F_total / max(1, len(load_nodes))
+    for n in load_nodes:
+        neum_bcs.append([int(n), 0, f_per_node])  # dof=0 => x
 
     
 print("-" * 20)
@@ -974,13 +1025,21 @@ for e in tqdm(range(nel), desc="Post-processing"):
 # ==========================================
 # ============ VISUALIZATION ============
 # ==========================================
-scale = 0.15 * torch.max(torch.abs(x)) / (torch.max(torch.abs(u)) + 1e-25)
+# [V6 FIX] Scale factor was too high, causing element inversion in plots.
+# Heuristic: max displacement in plot should be around 30% of element size, not 15% of body size.
+# Element size approx 0.45.
+elem_size_approx = 0.45
+scale_auto = 0.5 * elem_size_approx / (torch.max(torch.abs(u)) + 1e-25)
+# Cap scale to avoid "explosion" if u is very small, but also limit it if u is large.
+scale = min(float(scale_auto), 50.0)
+print(f"Plotting: auto-calculated scale factor = {scale:.2f}")
+
 x_def = x + scale * u.reshape(-1, 2)
 # Re-order connectivity for plotting if Q8 (matplotlib only likes linear quads nicely, or we just plot corners)
 # Q8 order: BL, BR, TR, TL, ...
 # We'll use just the first 4 nodes for the patch plot to keep it simple and working
 plot_conn = conn[:, :4] if nen >= 4 else conn
-limit = torch.max(torch.abs(x)) * 1.3
+limit = torch.max(torch.abs(x)) * 1.1
 
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 7.5))
 
@@ -1028,7 +1087,15 @@ ax2.set_xlim(-limit, limit); ax2.set_ylim(-limit, limit); ax2.set_aspect('equal'
 # 3. Discrete Stress
 ax3.set_title("3. Von Mises Spannung [MPa]", fontweight='bold')
 pc_s = PolyCollection(verts_def, cmap='jet', edgecolors='k', lw=0.5)
-pc_s.set_array(np.array(element_results["svm"]))
+s_vals = np.array(element_results["svm"])
+pc_s.set_array(s_vals)
+
+# Fix colorbar noise if field is uniform
+s_min, s_max = s_vals.min(), s_vals.max()
+if s_max - s_min < 1e-5:
+    s_mid = 0.5 * (s_min + s_max)
+    pc_s.set_clim(s_mid - 0.1, s_mid + 0.1)
+
 ax3.add_collection(pc_s); cbar3 = plt.colorbar(pc_s, ax=ax3, label="Spannung [MPa]")
 ax3.set_xlim(-limit, limit); ax3.set_ylim(-limit, limit); ax3.set_aspect('equal')
 
@@ -1129,30 +1196,35 @@ plt.title("Äquivalente plastische Hysterese")
 plt.grid(True)
 
 
-# Subplot 4: Yield Surface
+# Subplot 4: Yield Surface (Principal Stress Space)
 plt.subplot(2, 2, 4)
 if len(k_hist) > 0:
-    # robust: initial index nicht bei Step 1 (da fac=0) nehmen
-    idx0 = 0
-    for i, facv in enumerate(fac_used_hist):
-        if abs(facv) > 1e-10:
-            idx0 = i
-            break
-
-    k0 = k_hist[idx0]
-    a0  = a_hist[idx0]
+    # plot: Initial state should be virgin material (k=0, a=0)
+    # This guarantees we see the difference even if the first saved step is already hardened.
+    k0 = 0.0
+    a0 = torch.zeros(3,3)
+    
+    # Current state
     k1 = k_hist[-1]
-    a1  = a_hist[-1]
+    a1 = a_hist[-1]
 
-    x0, y0 = yield_curve_s11_t12_pdf(k0, a0)
-    x1, y1 = yield_curve_s11_t12_pdf(k1, a1)
+    # Function signature: yield_curve_sigma12_closed(alpha, beta)
+    # alpha = isotropic variable (k)
+    # beta  = backstress tensor (a)
+    x0, y0 = yield_curve_sigma12_closed(k0, a0)
+    x1, y1 = yield_curve_sigma12_closed(k1, a1)
 
     plt.plot(x0/1e6, y0/1e6, 'k--', lw=1.5, label="Initial")
     plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.0, label="Aktuell")
-    plt.xlabel(r"$\sigma_{11}$ [MPa]")
-    plt.ylabel(r"$\tau_{12}$ [MPa]")
-    plt.title(f"Yield Surface $(\\sigma_{{11}},\\tau_{{12}})$ (r={r:.2f})")
+    plt.xlabel(r"$\sigma_1$ [MPa]")
+    plt.ylabel(r"$\sigma_2$ [MPa]")
+    plt.title(f"Yield Surface Principal (r={r:.2f})")
     plt.grid(True); plt.legend(); plt.gca().set_aspect('equal','box')
+    
+    # Add origin crosshair
+    plt.axhline(0, color='black', lw=1.0, alpha=0.5)
+    plt.axvline(0, color='black', lw=1.0, alpha=0.5)
+
 else:
     plt.text(0.5, 0.5, "Keine plastischen Daten", ha='center')
 
