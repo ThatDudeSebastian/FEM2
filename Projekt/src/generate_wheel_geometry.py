@@ -17,8 +17,8 @@ def create_wheel_mesh():
     radii = [R_inner, R1, R2, R_outer]
     
     # Total span of the model: 60 degrees centered at bottom (-90 deg)
-    angle_start = math.radians(-100)
-    angle_end = math.radians(-80)
+    angle_start = math.radians(-80)
+    angle_end = math.radians(-100)
     angle_bottom = math.radians(-90)
     
     # Load area angles (exactly 5 nodes = 4 intervals)
@@ -35,15 +35,16 @@ def create_wheel_mesh():
     
     # Radial divisions
     # Outer layer (R2-R_outer): Very fine
-    n_rad_outer = 16
+    n_rad_outer = 32 
     # Middle layer: Transitioning towards contact
-    n_rad_middle = 12
+    n_rad_middle = 16
     # Inner layer: Biased towards hole
     n_rad_inner = 12
     
     # Circumferential divisions
-    n_load = 10 # Nodes at the bottom contact strip
-    n_side = 15
+    # We'll keep the partitions but let's use the progression to coarse them inwards
+    n_load = 41 # Nodes at the bottom contact strip
+    n_side = 25 
     
     # Create center point
     center = gmsh.model.geo.addPoint(0, 0, 0)
@@ -92,9 +93,9 @@ def create_wheel_mesh():
     # Meshing Constraints
     for a_idx in range(4):
         # Layer 0: Inner - Bias towards R_inner (coef > 1 means growth away from start)
-        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][0], n_rad_inner, coef=1)
+        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][0], n_rad_inner, coef=1.2)
         # Layer 1: Middle - Bias towards contact part (R2)
-        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][1], n_rad_middle, coef=1)
+        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][1], n_rad_middle, coef=0.85)
         # Layer 2: Outer - Inflation layer (fine towards R_outer)
         gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][2], n_rad_outer, coef=0.75)
             
