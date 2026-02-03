@@ -42,14 +42,14 @@ width = 0.00583
 
 sigma_y = 350e6    # Fließspannung
 H = 209e7          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
-r = 0.0            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
+r = 1.0            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
-F_total = -1500000.0 
+F_total = -2500000.0 
 
 # --- Cyclic force loading ---
 n_cycles = 2.0
-n_steps_per_cycle = 30
+n_steps_per_cycle = 60
 n_steps = n_cycles * n_steps_per_cycle
 
 F_amp = F_total          # Amplitude der zyklischen Kraft (N), z.B. -40000
@@ -1092,7 +1092,10 @@ pc_s.set_array(s_vals)
 
 # Fix colorbar noise if field is uniform
 s_min, s_max = s_vals.min(), s_vals.max()
-if s_max - s_min < 1e-5:
+print(f"DEBUG PLOT: Stress Range: Min={s_min:.4e}, Max={s_max:.4e}, Delta={s_max-s_min:.4e}")
+
+if s_max - s_min < 0.1:
+    print(" -> Field is uniform. Enforcing fixed colorbar limits to identify noise.")
     s_mid = 0.5 * (s_min + s_max)
     pc_s.set_clim(s_mid - 0.1, s_mid + 0.1)
 
@@ -1181,18 +1184,18 @@ plt.legend()
 
 # Subplot 2: Hysteresis Stress-Strain
 plt.subplot(2, 2, 2)
-plt.plot(eps_p_xx_hist, sig_yy_hist, lw=2)
+plt.plot(eps_p_xx_hist, sig_yy_hist, lw=2, color='blue')
 plt.xlabel(r"$\varepsilon^{p}_{xx}$ [-]")
 plt.ylabel(r"$\sigma_{xx}$ [Pa]")
-plt.title("σxx–εxx^p Hysterese (Tracking-GP)")
+plt.title("Hysterese: Axialspannung vs. Plast. Dehnung")
 plt.grid(True)
 
 # Subplot 3: Equivalent Hysteresis
 plt.subplot(2, 2, 3)
-plt.plot(eps_p_eq_hist, sig_eq_hist, lw=2)
+plt.plot(eps_p_eq_hist, sig_eq_hist, lw=2, color='green')
 plt.xlabel(r"$\varepsilon^p_\mathrm{eq}$ [-]")
 plt.ylabel(r"$\sigma_\mathrm{eq}$ [Pa]")
-plt.title("Äquivalente plastische Hysterese")
+plt.title("Äquivalente Sannung vs. Akkumulierte Plast. Dehnung")
 plt.grid(True)
 
 
@@ -1211,19 +1214,26 @@ if len(k_hist) > 0:
     # Function signature: yield_curve_sigma12_closed(alpha, beta)
     # alpha = isotropic variable (k)
     # beta  = backstress tensor (a)
-    x0, y0 = yield_curve_sigma12_closed(k0, a0)
-    x1, y1 = yield_curve_sigma12_closed(k1, a1)
+    # Calculate Backstress Tensor (Stress Units) from Internal Variable a (Strain Units)
+    # alpha_h (PDF) = -(2/3)(1-r)H * a
+    # Center of yield surface X = -alpha_h = (2/3)(1-r)H * a
+    factor = (2.0/3.0) * (1.0 - r) * H
+    beta0 = factor * a0
+    beta1 = factor * a1
 
-    plt.plot(x0/1e6, y0/1e6, 'k--', lw=1.5, label="Initial")
-    plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.0, label="Aktuell")
-    plt.xlabel(r"$\sigma_1$ [MPa]")
-    plt.ylabel(r"$\sigma_2$ [MPa]")
-    plt.title(f"Yield Surface Principal (r={r:.2f})")
+    x0, y0 = yield_curve_sigma12_closed(k0, beta0)
+    x1, y1 = yield_curve_sigma12_closed(k1, beta1)
+
+    plt.plot(x0/1e6, y0/1e6, 'k--', lw=2.5, label="Initial (Yield)")
+    plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.5, label="Aktuell (Hardened)")
+    plt.xlabel(r"HS $\sigma_1$ [MPa]")
+    plt.ylabel(r"HS $\sigma_2$ [MPa]")
+    plt.title(f"Fließfläche im HS-Raum (r={r:.2f})")
     plt.grid(True); plt.legend(); plt.gca().set_aspect('equal','box')
     
     # Add origin crosshair
-    plt.axhline(0, color='black', lw=1.0, alpha=0.5)
-    plt.axvline(0, color='black', lw=1.0, alpha=0.5)
+    plt.axhline(0, color='black', lw=1.0, alpha=0.3)
+    plt.axvline(0, color='black', lw=1.0, alpha=0.3)
 
 else:
     plt.text(0.5, 0.5, "Keine plastischen Daten", ha='center')
