@@ -33,7 +33,7 @@ interactive_hover = True
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Standard-Datei
-mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Wheel_Refined.msh"))
+mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Rad.msh"))
 
 print(f"Loading mesh from: {mesh_file}")
 
@@ -55,17 +55,17 @@ F_total = -40000.0
 # ============ MESH LOADING ============
 # ==========================================
 try:
-    x, conn, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type='quad8')
+    x, conn, pt_sets, cell_sets, mesh_cells = load_mesh(mesh_file, device=device, primary_element_type='quad8')
     element_type = 'quad8'
 except Exception as e:
     print(f"Standard load failed: {e}")
     print("Attempting fallbacks...")
     try:
-        x, conn, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type='quad')
+        x, conn, pt_sets, cell_sets, mesh_cells = load_mesh(mesh_file, device=device, primary_element_type='quad')
         element_type = 'quad4'
     except:
         # Load whatever is there
-        x, c_dict, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type=None)
+        x, c_dict, pt_sets, cell_sets, mesh_cells = load_mesh(mesh_file, device=device, primary_element_type=None)
         
         print(f"DEBUG: Available element types: {list(c_dict.keys())}")
         

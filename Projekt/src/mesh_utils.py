@@ -19,6 +19,9 @@ def load_mesh(filepath, device="cpu", primary_element_type=None):
         tuple: (nodes, connectivity)
             - nodes: torch.Tensor of shape (N, 2) or (N, 3)
             - connectivity: torch.Tensor of shape (Nel, Nen) or dict of such tensors
+- point_sets: dict of point sets
+- cell_sets: dict of cell sets
+- cells: raw meshio cell blocks (list of CellBlock)
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Mesh file not found: {filepath}")
@@ -32,8 +35,8 @@ def load_mesh(filepath, device="cpu", primary_element_type=None):
             x, c = load_custom_mesh_format(filepath, device)
             # Return empty sets for custom format as it doesn't support them yet
             if primary_element_type:
-                return x, c, {}, {}
-            return x, {"custom": c}, {}, {}
+                return x, c, {}, {}, []
+            return x, {"custom": c}, {}, {}, []
 
         mesh = meshio.read(filepath)
     except Exception as e:
@@ -66,21 +69,21 @@ def load_mesh(filepath, device="cpu", primary_element_type=None):
 
     if primary_element_type:
         if primary_element_type in conns:
-            return nodes, conns[primary_element_type], point_sets, cell_sets
+            return nodes, conns[primary_element_type], point_sets, cell_sets, mesh.cells
         else:
             # Check if primary_element_type matches the custom format's elements
             # The custom format doesn't have multiple types, so we just return it
             # if the caller is asking for something like 'quad' or 'line'
             try:
                 x, c = load_custom_mesh_format(filepath, device)
-                return x, c, {}, {}
+                return x, c, {}, {}, []
             except:
                 available = list(conns.keys())
                 raise ValueError(
                     f"Requested element type '{primary_element_type}' not found. Available: {available}"
                 )
 
-    return nodes, conns, point_sets, cell_sets
+    return nodes, conns, point_sets, cell_sets, mesh.cells
 
 
 def get_geometry_from_file(filepath, element_type=None, device="cpu"):
@@ -88,7 +91,7 @@ def get_geometry_from_file(filepath, element_type=None, device="cpu"):
     Compatibility helper that returns nodes and connectivity,
     matching the signature of manual geometry functions.
     """
-    x, conn, _, _ = load_mesh(
+    x, conn, _, _, _ = load_mesh(
         filepath, device=device, primary_element_type=element_type
     )
     return x, conn
@@ -152,7 +155,7 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(script_dir, "mesh", "Rad.msh")
     try:
-        x, conn, pt_sets, cell_sets = load_mesh(path)
+        x, conn, pt_sets, cell_sets, cells = load_mesh(path)
         print(f"Successfully loaded {path}")
         print(f"Nodes: {x.shape}")
         if isinstance(conn, dict):
