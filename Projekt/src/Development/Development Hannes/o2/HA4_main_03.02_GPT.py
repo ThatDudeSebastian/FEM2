@@ -1273,6 +1273,15 @@ if len(k_hist) > 0:
     plt.plot(x0/1e6, y0/1e6, 'k--', lw=2.5, label="Initial (Yield)")
     plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.5, label="Aktuell (Hardened)")
     
+    # Plane Strain Limit Lines (s1 - s2 = +/- 2/sqrt(3) * sig_eff)
+    sig_eff_current = sigma_y + r*H*k1
+    limit_val = (2.0 / math.sqrt(3.0)) * sig_eff_current / 1e6
+    x_range = np.linspace(-limit_val*2, limit_val*2, 100)
+    # Line 1: s1 - s2 = limit_val => s2 = s1 - limit_val
+    # Line 2: s1 - s2 = -limit_val => s2 = s1 + limit_val
+    plt.plot(x_range, x_range - limit_val, 'r:', lw=1.5, alpha=0.6, label="PE Limit")
+    plt.plot(x_range, x_range + limit_val, 'r:', lw=1.5, alpha=0.6)
+    
     # Plot Stress Path Trajectory
     if len(sig_1_hist) > 0:
         plt.plot(sig_1_hist, sig_2_hist, 'b-', lw=1.5, alpha=0.7, label="Stress Path")
