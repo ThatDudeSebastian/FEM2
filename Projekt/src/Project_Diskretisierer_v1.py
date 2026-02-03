@@ -11,6 +11,7 @@ import math
 import os
 from tqdm import tqdm
 from mesh_utils import load_mesh, get_bcs_from_sets
+import time
 
 # ============ SETTINGS & CONFIG ===========
 
@@ -40,18 +41,15 @@ nu = 0.3
 width = 0.00583
 
 sigma_y = 350e6    # Fließspannung
-H = 209e7          # Isotrope Verfestigung
-Ckin = 1.0e8       # kinematische Verfestigung
-r = 0.0           # Faktor der Mischung
-H_iso = r * H
-C_kin = (1-r) * Ckin
+H = 209e7          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
+r = 1.0            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
-F_total = -1500000.0 
+F_total = -2500000.0 
 
 # --- Cyclic force loading ---
 n_cycles = 2.0
-n_steps_per_cycle = 30
+n_steps_per_cycle = 60
 n_steps = n_cycles * n_steps_per_cycle
 
 F_amp = F_total          # Amplitude der zyklischen Kraft (N), z.B. -40000
@@ -62,12 +60,44 @@ n_ramp_steps = 5         # sanftes Einschwingen für Newton
 # ==========================================
 # ============ MESH LOADING ============
 # ==========================================
-x, conn, pt_sets, cell_sets = load_mesh(mesh_file, device=device, primary_element_type=element_type)
+try:
+    x, conn, pt_sets, cell_sets, mesh_cells = load_mesh(
+        mesh_file, device=device, primary_element_type="quad8"
+    )
+    element_type = "quad8"
+except Exception as e:
+    print(f"Standard load failed: {e}")
+    print("Attempting fallbacks...")
+    try:
+        x, conn, pt_sets, cell_sets, mesh_cells = load_mesh(
+            mesh_file, device=device, primary_element_type="quad"
+        )
+        element_type = "quad4"
+    except:
+        x, c_dict, pt_sets, cell_sets, mesh_cells = load_mesh(
+            mesh_file, device=device, primary_element_type=None
+        )
+        found_type = None
+        for t in ["quad8", "quad9", "quad", "triangle", "triangle6"]:
+            if t in c_dict:
+                conn = c_dict[t]
+                found_type = t
+                element_type = t
+                break
+        if found_type is None:
+            available = [k for k in c_dict.keys() if k not in ["vertex", "line", "point"]]
+            k = available[0] if available else list(c_dict.keys())[0]
+            conn = c_dict[k]
+            element_type = k
 
-print("Lx =", (x[:,0].max()-x[:,0].min()).item(), "Ly =", (x[:,1].max()-x[:,1].min()).item())
-e0 = conn[0]
-pts = x[e0[:4]]  # grob
-print("approx element size =", torch.norm(pts[1]-pts[0]).item())
+print(f"Loaded mesh with element type: {element_type}")
+
+print(
+    "Lx =",
+    (x[:, 0].max() - x[:, 0].min()).item(),
+    "Ly =",
+    (x[:, 1].max() - x[:, 1].min()).item(),
+)
 
 
 # Fix for "Floating Nodes" (Center nodes of Q9 grid not used by Q8 elements)
@@ -81,67 +111,119 @@ ndf = 2
 # pt_sets is a dictionary: {"Fixed": [indices...], "Loaded": [indices...]}
 
 # --- Boundary Conditions ---
+def extract_nodes_from_sets(mesh_pt_sets, mesh_cell_sets, mesh_cells, target_names):
+    node_indices = set()
+    for name in target_names:
+        if name in mesh_pt_sets:
+            try:
+                # Ensure we have integer indices even if the input is strings or objects
+                indices = np.array(mesh_pt_sets[name]).astype(int)
+                node_indices.update(indices.tolist())
+            except:
+                pass
+    if mesh_cell_sets:
+        for set_name, block_masks in mesh_cell_sets.items():
+            if any(tn.lower() in set_name.lower() for tn in target_names):
+                for b_idx, mask in enumerate(block_masks):
+                    if mask is not None and len(mask) > 0 and b_idx < len(mesh_cells):
+                        mask_arr = np.array(mask)
+                        block_data = mesh_cells[b_idx].data
+                        if np.issubdtype(mask_arr.dtype, np.bool_):
+                            if len(mask_arr) == len(block_data):
+                                node_indices.update(block_data[mask_arr].flatten())
+                        else:
+                            try:
+                                # Ensure integer indices to avoid ufunc errors with strings
+                                indices = mask_arr.astype(int)
+                                valid_indices = indices[indices < len(block_data)]
+                                node_indices.update(block_data[valid_indices].flatten())
+                            except:
+                                continue
+    return list(node_indices)
+
 drlt_bcs = []
 neum_bcs = []
 x_min, x_max = torch.min(x[:, 0]), torch.max(x[:, 0])
 
-# Logic: Check if "Fixed" set exists. If so, use it. Else use coords.
-print("-" * 20)
-if "Fixed" in pt_sets and len(pt_sets["Fixed"]) > 0:
-    print("BC INFO: Using 'Fixed' Node Set from .inp file.")
-    fixed_indices = pt_sets["Fixed"]
-    # Check if indices are 0-based? meshio usually returns 0-based.
-    # Note: pt_sets values are numpy arrays.
-    fixed_nodes = torch.tensor(fixed_indices, dtype=torch.long)
+fixed_nodes = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells, ["Fixed", "Support", "Lager", "Einspannung"])
+if not fixed_nodes:
+    print("BC INFO: Falling back to coordinate search for Fixed nodes.")
+    fixed_nodes = torch.where(torch.abs(x[:, 0] - x_min) < 1e-3)[0]
 else:
-    print("BC INFO: Node Set 'Fixed' NOT found. Fallback to coordinate search.")
-    # Tolerance for fine mesh
-    # x_min/max are scalar tensors, so we use item() for cleaner python float arithmetic if needed, 
-    # or keep torch ops. Newmark task grid is regular.
-    tol = 1e-3 # Stricter tolerance likely needed for fine grid
-    fixed_nodes = torch.where(torch.abs(x[:, 0] - x_min) < tol)[0]
-# RB für Biegung
-# for n in fixed_nodes:
-#     drlt_bcs.append([int(n), 0, 0.0]) # Fix X
-#     drlt_bcs.append([int(n), 1, 0.0]) # Fix Y
-# 1) u_x = 0 auf der linken Kante (alle fixed_nodes)
-
-# ----------------------------------
-# Determine load nodes (right edge)
-# ----------------------------------
-tol = 1e-8
-load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < tol)[0]
-
-
-print(f"BC INFO: Number of load nodes (right edge) = {len(load_nodes)}")
-
+    fixed_nodes = torch.tensor(fixed_nodes, dtype=torch.long)
 
 for n in fixed_nodes:
-    drlt_bcs.append([int(n), 0, 0.0])  # Fix X
+    drlt_bcs.append([int(n), 0, 0.0])
 
 ys = x[fixed_nodes, 1]
 n_ref = int(fixed_nodes[torch.argmin(ys)])
-drlt_bcs.append([n_ref, 1, 0.0])      # nur 1x uy=0 gegen RB
+drlt_bcs.append([n_ref, 1, 0.0])
 
-
-
-# Load at right edge in Y
-if "Loaded" in pt_sets and len(pt_sets["Loaded"]) > 0:
-    print("BC INFO: Using 'Loaded' Node Set from .inp file.")
-    load_indices = pt_sets["Loaded"]
-    load_nodes = torch.tensor(load_indices, dtype=torch.long)
+load_nodes = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells, ["Loaded"])
+if not load_nodes:
+    print("BC INFO: Falling back to coordinate search for Loaded nodes.")
+    load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < 1e-3)[0]
 else:
-    print("BC INFO: Node Set 'Loaded' NOT found. Fallback to coordinate search.")
-    tol = 1e-3
-    load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < tol)[0]
+    load_nodes = torch.tensor(load_nodes, dtype=torch.long)
 
 # Biegung y-Last
 # f_per_node = F_total / max(1, len(load_nodes))
 # for n in load_nodes:
 #     neum_bcs.append([int(n), 1, f_per_node])
-f_per_node = F_total / max(1, len(load_nodes))
-for n in load_nodes:
-    neum_bcs.append([int(n), 0, f_per_node])  # dof=0 => x
+# [V7 FIX] Q8 Consistent Nodal Loads (Simpson's Rule 1/6 : 4/6 : 1/6)
+# Uniform force on Q8 quadratic edge nodes causes distortion ("collapsed elements").
+# We must distribute F_total according to shape functions.
+if 'quad8' in element_type or nen == 8:
+    print("BC INFO: Calculating consistent nodal loads for Q8 elements...")
+    node_weights = torch.zeros(nnp)
+    
+    # Identify right edge elements
+    for e in range(nel):
+        n_idx = conn[e] # 0-7
+        # Right edge in local Q8 indexing (Counter-Clockwise from BL):
+        # 0(BL), 1(BR), 2(TR), 3(TL), 4(B), 5(R), 6(T), 7(L)
+        # Right edge nodes: 1 (Corner), 2 (Corner), 5 (Midside)
+        edge_nodes = [n_idx[1], n_idx[2], n_idx[5]]
+        
+        # Check if this edge is on the load boundary aka all nodes in load_nodes
+        # (We converted load_nodes to tensor earlier, let's use set for speed or just tensor checks)
+        # load_nodes is a tensor of indices.
+        
+        on_boundary = True
+        for en in edge_nodes:
+            if not torch.isin(en, load_nodes):
+                on_boundary = False
+                break
+        
+        if on_boundary:
+            # Add weights: Corners get 1, Midside gets 4
+            # Logic: Integral of N_i over edge length L_e. 
+            # int N_corner = L_e/6, int N_mid = 4L_e/6.
+            # We treat L_e as uniform.
+            node_weights[edge_nodes[0]] += 1.0
+            node_weights[edge_nodes[1]] += 1.0
+            node_weights[edge_nodes[2]] += 4.0
+
+    # Extract sum of weights for loaded nodes only
+    total_weight = torch.sum(node_weights[load_nodes])
+    if total_weight == 0:
+        print("WARNING: No Q8 boundary edges found matching load_nodes! Fallback to uniform.")
+        f_per_node = F_total / max(1, len(load_nodes))
+        for n in load_nodes:
+            neum_bcs.append([int(n), 0, f_per_node])
+    else:
+        print(f"BC INFO: Distributed Force using Q8 consistent weights (Total W={total_weight})")
+        for n in load_nodes:
+            w = node_weights[n]
+            if w > 0:
+                f_n = (w / total_weight) * F_total
+                neum_bcs.append([int(n), 0, float(f_n)])
+
+else:
+    # Linear elements / Fallback
+    f_per_node = F_total / max(1, len(load_nodes))
+    for n in load_nodes:
+        neum_bcs.append([int(n), 0, f_per_node])  # dof=0 => x
 
     
 print("-" * 20)
@@ -206,8 +288,23 @@ if 'quad8' in element_type or '8' in element_type:
 else:
     # Q4 defaults
     nqp=4; a=1.0/math.sqrt(3.0); qpt=torch.tensor([[-a,-a],[a,-a],[a,a],[-a,a]]); w8=torch.ones(4)
-C4 = torch.zeros(2, 2, 2, 2); fac = E / (1 - nu**2)
-C4[0,0,0,0]=C4[1,1,1,1]=fac; C4[0,0,1,1]=C4[1,1,0,0]=fac*nu; C4[0,1,0,1]=C4[1,0,0,1]=C4[0,1,1,0]=C4[1,0,1,0]=E/(2*(1+nu))
+C4 = torch.zeros(2, 2, 2, 2)
+# Plane Strain parameters
+mu = E / (2.0 * (1.0 + nu))
+lam = (E * nu) / ((1.0 + nu) * (1.0 - 2.0 * nu))
+
+# C_ijkl = lambda * delta_ij * delta_kl + mu * (delta_ik * delta_jl + delta_il * delta_jk)
+# 1111 -> lam + 2mu
+C4[0,0,0,0] = lam + 2.0*mu
+C4[1,1,1,1] = lam + 2.0*mu
+# 1122 -> lam
+C4[0,0,1,1] = lam
+C4[1,1,0,0] = lam
+# 1212 -> mu (and symmetric indices for shear)
+C4[0,1,0,1] = mu
+C4[1,0,0,1] = mu
+C4[0,1,1,0] = mu
+C4[1,0,1,0] = mu
 
 
 
@@ -286,7 +383,7 @@ def von_mises_return(eps2, state):
     v = s_red_tr / norm_red  # direction
 
     B = 2.0*mu + (2.0/3.0)*H
-    A = 2.0*mu + (2.0/3.0)*(1.0 - r)*H
+    A = 2.0*mu
 
     dlam = float(Phi_tr) / float(B)
     dlam_t = torch.tensor(dlam, dtype=torch.float64)
@@ -328,81 +425,7 @@ def von_mises_return(eps2, state):
     return sig2, Ct2, state_new
 
 
-    # --- plastic step (radial return) ---
 
-    G = mu
-
-    H_iso = r * H                 # isotrope Verfestigung (Pa)
-    C_kin = (1.0 - r) * Ckin      # kinematische Verfestigung (Pa)
-
-    # "kombinierter" Hardening-Anteil im Konsistenznenner:
-    H_bar = H_iso + C_kin         # für Prager + isotrop (linear)
-
-    # Reduced trial deviatoric stress
-    eta = s_tr - beta
-    norm_eta = torch.sqrt(torch.sum(eta*eta) + 1e-30)
-
-    v = eta / norm_eta
-
-    Phi_tr = norm_eta - math.sqrt(2.0/3.0) * (sigma_y + H_iso * alpha)
-
-    denom = 2.0*G + (2.0/3.0)*H_bar
-    dlam = float(Phi_tr) / denom
-    if dlam < 0.0:   # dlam nicht negativ werden DARF
-        dlam = 0.0
-    dlam_t = torch.tensor(dlam, dtype=torch.float64)
-
-    ep_new = ep + dlam_t * v
-
-    alpha_new = alpha + dlam * math.sqrt(2.0/3.0)   # darf weiter laufen, beeinflusst r=0 nicht
-
-    # Backstress: Prager
-    beta_new = beta + (2.0/3.0) * C_kin * dlam_t * v
-
-    beta_new = beta_new - (torch.trace(beta_new)/3.0) * I3
-
-    s_new = s_tr - 2.0*G*dlam_t*v
-
-    p = tr_s/3.0
-    sig = s_new + p*I3
-
-
-    # -------- konsistenter algorithmischer Tangent (Box 6.5) ----------
-
-    # I4s = symm identity (4th order)
-    I4s = torch.zeros(3,3,3,3, dtype=torch.float64)
-    for i in range(3):
-        for j in range(3):
-            for k in range(3):
-                for l in range(3):
-                    I4s[i,j,k,l] = 0.5*((1.0 if (i==k and j==l) else 0.0) +
-                                        (1.0 if (i==l and j==k) else 0.0))
-    IoxI = torch.einsum("ij,kl->ijkl", I3, I3)
-    Idev_sym = I4s - (1.0/3.0)*IoxI
-
-    # Box-Hilfsgrößen:
-    A = 2.0*G + (2.0/3.0)*C_kin   # 2G + 2/3 (1-r)H
-    B = 2.0*G + (2.0/3.0)*H_bar   # 2G + 2/3 H
-
-    # c1, c2 aus Box 6.5
-    # --- FIX: norm_eta für Tangent-Formel robust machen ---
-    norm_eta_val = float(norm_eta)
-    norm_eta_safe = max(norm_eta_val, 1e-8 * sigma_y)   # Skalenbasiert statt 1e-30
-
-    c1 = 2.0*G * (1.0 - (A / norm_eta_safe) * dlam)
-    c2 = 2.0*G * A * (dlam / norm_eta_safe - 1.0 / B)
-
-
-    vv = torch.einsum("ij,kl->ijkl", v, v)
-
-    C3 = K*IoxI + c1*Idev_sym + c2*vv
-
-    # reduce to 2D in-plane tensorial mapping (plane strain)
-    Ct2 = C3[0:2, 0:2, 0:2, 0:2]
-    sig2 = sig[0:2, 0:2]
-
-    state_new = {"ep": ep_new, "alpha": alpha_new, "beta": beta_new}
-    return sig2, Ct2, state_new
 
 
 
@@ -574,8 +597,24 @@ drlt_mask = torch.zeros(nnp*ndf, 1)
 for bc in drlt: drlt_mask[int(bc[0])*ndf + int(bc[1])] = 1.0
 
 # Apply stabilization
+# Apply stabilization
+fixed_floating_count = 0
 for dof in floating_dofs_list:
-    drlt_mask[int(dof)] = 1.0
+    # Safety Check: Don't fix loaded DOFs!
+    is_loaded = False
+    for bc in neum:
+        load_dof = int(bc[0])*ndf + int(bc[1])
+        if int(dof) == load_dof:
+            is_loaded = True
+            break
+    
+    if not is_loaded:
+        drlt_mask[int(dof)] = 1.0
+        fixed_floating_count += 1
+    else:
+        print(f"CRITICAL WARNING: Node {int(dof)//ndf} DOF {int(dof)%ndf} has zero stiffness but IS LOADED. Not fixing it! (Check Mesh/Element Type)")
+
+print(f"Stabilization: Fixed {fixed_floating_count} floating DOFs (skipped loaded ones).")
 
 free_dofs = torch.nonzero(1.0 - drlt_mask)[:, 0]
 for bc in neum: f_ext[int(bc[0])*ndf + int(bc[1])] = bc[2]
@@ -612,6 +651,7 @@ def cyclic_factor(step, n_steps_per_cycle):
 
 track_el = 0
 track_q = 0
+tracking_elem = nel - 1
 
 k_hist = []  # isotrope Variable k
 a_hist  = []  # kinematische Variable a
@@ -621,7 +661,12 @@ sig_yy_hist = []
 eps_eq_hist = []
 sig_eq_hist = []
 eps_p_eq_hist = []
+eps_p_eq_hist = []
 eps_p_xx_hist = []
+sig_1_hist = [] # Principal Stresses History
+sig_2_hist = []
+
+total_start_time = time.time()
 
 
 
@@ -640,6 +685,7 @@ while step <= n_steps:
     pbar.refresh()
 
     print(f"\nSTEP {step}/{n_steps}")
+    t_start_step = time.time()
 
     fac_scale = 1.0               # aktuelle Skalierung des Step-Inkrements
 
@@ -883,7 +929,7 @@ while step <= n_steps:
             du_f = torch.linalg.solve(Kt[free_dofs][:, free_dofs], Rf)
             du[free_dofs] = du_f
             # einfaches Dämpfungskonzept
-            omega = 0.2 if r == 0.0 else 1.0
+            omega = 1.0
             u += omega * du
 
 
@@ -903,12 +949,51 @@ while step <= n_steps:
             # sehr wichtig: neuen konvergierten Zustand als Startpunkt für das nächste Substep setzen
             state_gp_old = clone_state_gp(state_gp)
             u_old = u.clone()
+            
+            # --- TRACK STRESS PATH (Tracking Element) ---
+            # Extract state for Element 'tracking_elem' (the last one), QP 0
+            # Re-calculate stress from displacement (u) and state_new (state_gp)
+            
+            # Get displacement for tracking element
+            n_idx_tr = conn[tracking_elem]
+            # Gather flat, then reshape to (nen, ndf) -> (8,2)
+            dof_indices_tr = []
+            for n in n_idx_tr:
+                dof_indices_tr.extend([int(n)*ndf, int(n)*ndf+1])
+            ue_tr = u[dof_indices_tr].clone().reshape(nen, ndf)
+            
+            # QP 0
+            N_tr, gamma_tr = get_shape_data(qpt[0], nen) # using QP 0
+            xe_tr = x[n_idx_tr].t()
+            Je_tr = xe_tr.mm(gamma_tr)
+            G_tr = torch.linalg.solve(Je_tr.T, gamma_tr.T).T
+            
+            # grad_u = du/dX = ue.T * G  -> (2,8)*(8,2) = (2,2)
+            grad_u_tr = ue_tr.t().mm(G_tr)
+            eps_tr = 0.5 * (grad_u_tr + grad_u_tr.t())
+            
+            # Use CURRENT converged state (state_gp is the new one for next step, so it holds the just-converged updated vars)
+            st_tr_q0 = state_gp[tracking_elem][0] 
+            sig_tr, _, _ = von_mises_return(eps_tr, st_tr_q0)
+            
+            s11 = sig_tr[0,0].item()
+            s22 = sig_tr[1,1].item()
+            s12 = sig_tr[0,1].item()
+            s_avg = (s11 + s22) / 2.0
+            s_R = math.sqrt(((s11 - s22) / 2.0)**2 + s12**2)
+            # Append to history
+            sig_1_hist.append((s_avg + s_R) / 1e6)
+            sig_2_hist.append((s_avg - s_R) / 1e6)
+            # ---------------------------------------------
 
             # Ziel erreicht? -> globalen Step verlassen
             rem = fac_target - fac_conv
             if abs(rem) < fac_tol:
                 fac_conv = fac_target   # snap exakt aufs Ziel
+                fac_conv = fac_target   # snap exakt aufs Ziel
                 step += 1
+                t_end_step = time.time()
+                print(f" -> Step completed in {t_end_step - t_start_step:.2f} s")
                 break
             else:
              # Ziel noch nicht erreicht -> im selben Step weiter Richtung fac_target
@@ -1015,13 +1100,25 @@ for e in tqdm(range(nel), desc="Post-processing"):
 # ==========================================
 # ============ VISUALIZATION ============
 # ==========================================
-scale = 0.15 * torch.max(torch.abs(x)) / (torch.max(torch.abs(u)) + 1e-25)
+# [V6 FIX] Scale factor was too high, causing element inversion in plots.
+# Heuristic: max displacement in plot should be around 30% of element size, not 15% of body size.
+# Element size approx 0.45.
+elem_size_approx = 0.45
+scale_auto = 0.5 * elem_size_approx / (torch.max(torch.abs(u)) + 1e-25)
+# Cap scale to avoid "explosion" if u is very small, but also limit it if u is large.
+scale = min(float(scale_auto), 50.0)
+print(f"Plotting: auto-calculated scale factor = {scale:.2f}")
+
+total_end_time = time.time()
+sim_duration = total_end_time - total_start_time
+print(f"TOTAL SIMULATION TIME: {sim_duration:.2f} s")
+
 x_def = x + scale * u.reshape(-1, 2)
 # Re-order connectivity for plotting if Q8 (matplotlib only likes linear quads nicely, or we just plot corners)
 # Q8 order: BL, BR, TR, TL, ...
 # We'll use just the first 4 nodes for the patch plot to keep it simple and working
 plot_conn = conn[:, :4] if nen >= 4 else conn
-limit = torch.max(torch.abs(x)) * 1.3
+limit = torch.max(torch.abs(x)) * 1.1
 
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 7.5))
 
@@ -1069,7 +1166,18 @@ ax2.set_xlim(-limit, limit); ax2.set_ylim(-limit, limit); ax2.set_aspect('equal'
 # 3. Discrete Stress
 ax3.set_title("3. Von Mises Spannung [MPa]", fontweight='bold')
 pc_s = PolyCollection(verts_def, cmap='jet', edgecolors='k', lw=0.5)
-pc_s.set_array(np.array(element_results["svm"]))
+s_vals = np.array(element_results["svm"])
+pc_s.set_array(s_vals)
+
+# Fix colorbar noise if field is uniform
+s_min, s_max = s_vals.min(), s_vals.max()
+print(f"DEBUG PLOT: Stress Range: Min={s_min:.4e}, Max={s_max:.4e}, Delta={s_max-s_min:.4e}")
+
+if s_max - s_min < 0.1:
+    print(" -> Field is uniform. Enforcing fixed colorbar limits to identify noise.")
+    s_mid = 0.5 * (s_min + s_max)
+    pc_s.set_clim(s_mid - 0.1, s_mid + 0.1)
+
 ax3.add_collection(pc_s); cbar3 = plt.colorbar(pc_s, ax=ax3, label="Spannung [MPa]")
 ax3.set_xlim(-limit, limit); ax3.set_ylim(-limit, limit); ax3.set_aspect('equal')
 
@@ -1141,92 +1249,84 @@ print("len(a_hist)       =", len(a_hist))
 assert len(disp_pl) == len(load_hist) == len(fac_used_hist), "History arrays are inconsistent!"
 assert len(k_hist) == len(a_hist) == len(fac_used_hist), "k/a history inconsistent!"
 
-plt.figure(figsize=(7,5))
-plt.plot(disp_pl,load_hist,'r',lw=2,label="plastisch")
-plt.plot(disp_pl,load_target_hist,'k--',lw=1,label="target")  # [V5.1 CHANGE]
+plt.figure(figsize=(15, 10))
+
+# Subplot 1: Force-Displacement
+plt.subplot(2, 2, 1)
+plt.plot(disp_pl, load_hist, 'r', lw=2, label="Plastisch")
+plt.plot(disp_pl, load_target_hist, 'k--', lw=1, label="Target")
 plt.xlabel("Verschiebung [m]")
 plt.ylabel("Last [N]")
 plt.title("Last–Verschiebungs–Kurve")
 plt.grid(True)
 plt.legend()
-plt.show()
 
-plt.figure(figsize=(7,5))
-plt.plot(eps_p_xx_hist, sig_yy_hist, lw=2)
+# Subplot 2: Hysteresis Stress-Strain
+plt.subplot(2, 2, 2)
+plt.plot(eps_p_xx_hist, sig_yy_hist, lw=2, color='blue')
 plt.xlabel(r"$\varepsilon^{p}_{xx}$ [-]")
 plt.ylabel(r"$\sigma_{xx}$ [Pa]")
-plt.title("σxx–εxx^p Hysterese (axial, Tracking-Gauss-Punkt)")
+plt.title("Hysterese: Axialspannung vs. Plast. Dehnung")
 plt.grid(True)
-plt.tight_layout()
-plt.show()
 
-
-print("len(eps_p_xx_hist) =", len(eps_p_xx_hist), "len(sig_eq_hist) =", len(sig_yy_hist))
-assert len(eps_p_xx_hist) == len(sig_yy_hist), "eps_p_eq_hist und sig_eq_hist unterschiedlich lang"
-
-plt.figure(figsize=(7,5))
-plt.plot(eps_p_eq_hist, sig_eq_hist, lw=2)
+# Subplot 3: Equivalent Hysteresis
+plt.subplot(2, 2, 3)
+plt.plot(eps_p_eq_hist, sig_eq_hist, lw=2, color='green')
 plt.xlabel(r"$\varepsilon^p_\mathrm{eq}$ [-]")
 plt.ylabel(r"$\sigma_\mathrm{eq}$ [Pa]")
-plt.title("Äquivalente plastische Hysterese (korrekt)")
+plt.title("Äquivalente Sannung vs. Akkumulierte Plast. Dehnung")
 plt.grid(True)
+
+
+# Subplot 4: Yield Surface (Principal Stress Space)
+plt.subplot(2, 2, 4)
+if len(k_hist) > 0:
+    # plot: Initial state should be virgin material (k=0, a=0)
+    # This guarantees we see the difference even if the first saved step is already hardened.
+    k0 = 0.0
+    a0 = torch.zeros(3,3)
+    
+    # Current state
+    k1 = k_hist[-1]
+    a1 = a_hist[-1]
+
+    # Function signature: yield_curve_sigma12_closed(alpha, beta)
+    # alpha = isotropic variable (k)
+    # beta  = backstress tensor (a)
+    # Calculate Backstress Tensor (Stress Units) from Internal Variable a (Strain Units)
+    # alpha_h (PDF) = -(2/3)(1-r)H * a
+    # Center of yield surface X = -alpha_h = (2/3)(1-r)H * a
+    factor = (2.0/3.0) * (1.0 - r) * H
+    beta0 = factor * a0
+    beta1 = factor * a1
+
+    x0, y0 = yield_curve_sigma12_closed(k0, beta0)
+    x1, y1 = yield_curve_sigma12_closed(k1, beta1)
+
+    plt.plot(x0/1e6, y0/1e6, 'k--', lw=2.5, label="Initial (Yield)")
+    plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.5, label="Aktuell (Hardened)")
+    
+    # Plot Stress Path Trajectory
+    if len(sig_1_hist) > 0:
+        plt.plot(sig_1_hist, sig_2_hist, 'b-', lw=1.5, alpha=0.7, label="Stress Path")
+        plt.plot(sig_1_hist[-1], sig_2_hist[-1], 'bo', markersize=6, label="Current State")
+    
+    plt.xlabel(r"HS $\sigma_1$ [MPa]")
+    plt.ylabel(r"HS $\sigma_2$ [MPa]")
+    plt.title(f"Fließfläche im HS-Raum (r={r:.2f})")
+    plt.legend()
+    plt.grid(True)
+    plt.axis('equal')
+    
+    # Add Simulation Time Text
+    plt.figtext(0.5, 0.01, f"Simulation Duration: {sim_duration:.2f} s", ha="center", fontsize=9, bbox={"facecolor":"white", "alpha":0.5, "pad":3})
+    
+    # Add origin crosshair
+    plt.axhline(0, color='black', lw=1.0, alpha=0.3)
+    plt.axvline(0, color='black', lw=1.0, alpha=0.3)
+
+else:
+    plt.text(0.5, 0.5, "Keine plastischen Daten", ha='center')
+
 plt.tight_layout()
 plt.show()
-
-
-# ==========================================
-# ============ YIELD SURFACE PLOTS ==========
-# ==========================================
-
-
-def plot_yield_surfaces(alpha0, beta0, alpha1, beta1, title):
-
-    x0, y0 = yield_curve_sigma12_closed(alpha0, beta0)
-    print("yield x0:", np.nanmin(x0), np.nanmax(x0), "nan?", np.isnan(x0).any())
-    print("yield y0:", np.nanmin(y0), np.nanmax(y0), "nan?", np.isnan(y0).any())
-
-    x1, y1 = yield_curve_sigma12_closed(alpha1, beta1)
-
-    plt.plot(x0/1e6, y0/1e6, 'k--', lw=1.5, label="initial")
-    plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.0, label="aktuell")
-    plt.axhline(0, color='gray', lw=0.5)
-    plt.axvline(0, color='gray', lw=0.5)
-    plt.gca().set_aspect('equal', 'box')
-    plt.xlabel(r"$\sigma_1$ [MPa]")
-    plt.ylabel(r"$\sigma_2$ [MPa]")
-    plt.title(title)
-    plt.grid(True)
-    plt.legend()
-
-
-# --- Yield Surface in (sigma11, tau12) nur wenn alpha/beta verfügbar ---
-if len(k_hist) > 0:
-    # robust: initial index nicht bei Step 1 (da fac=0) nehmen
-    idx0 = 0
-    for i, facv in enumerate(fac_used_hist):
-        if abs(facv) > 1e-10:
-            idx0 = i
-            break
-
-    k0 = k_hist[idx0]
-    a0  = a_hist[idx0]
-    k1 = k_hist[-1]
-    a1  = a_hist[-1]
-
-    x0, y0 = yield_curve_s11_t12_pdf(k0, a0)
-    x1, y1 = yield_curve_s11_t12_pdf(k1, a1)
-
-    plt.figure(figsize=(6.5,6.0))
-    plt.plot(x0/1e6, y0/1e6, 'k--', lw=1.5, label="initial")
-    plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.0, label="aktuell")
-    plt.xlabel(r"$\sigma_{11}$ [MPa]")
-    plt.ylabel(r"$\tau_{12}$ [MPa]")
-    plt.title(f"Yield Surface in $(\\sigma_{{11}},\\tau_{{12}})$ (r={r:.2f})")
-    plt.grid(True); plt.legend(); plt.gca().set_aspect('equal','box')
-    plt.show()
-else:
-    print("WARN: k_hist/a_hist leer -> kein Yield-Surface-Plot (s11,t12)")
-
-print("len hyst:", len(eps_yy_hist), len(sig_yy_hist))
-
-plt.tight_layout(); plt.show()

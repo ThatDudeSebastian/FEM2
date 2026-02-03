@@ -1,0 +1,55 @@
+/COM,ANSYS RELEASE 2025 R2           BUILD 25.2      UP20250519       21:04:37
+
+ *** WARNING ***                         CP =       0.328   TIME= 21:04:38
+ Element shape checking is currently inactive.  Issue SHPP,ON or         
+ SHPP,WARN to reactivate, if desired.                                    
+
+ *** WARNING ***                         CP =       0.328   TIME= 21:04:38
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       0.781   TIME= 21:04:39
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       0.922   TIME= 21:04:39
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       1.125   TIME= 21:04:39
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       1.312   TIME= 21:04:39
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       1.516   TIME= 21:04:40
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       1.719   TIME= 21:04:40
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       1.906   TIME= 21:04:40
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       2.062   TIME= 21:04:41
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          
+
+ *** WARNING ***                         CP =       2.172   TIME= 21:04:41
+ Material number 2 (used by element 181) should normally have at least   
+ one MP or one TB type command associated with it.  Output of energy by  
+ material may not be available.                                          

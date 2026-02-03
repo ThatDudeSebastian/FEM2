@@ -1,0 +1,106 @@
+# encoding: utf-8
+# 2025 R2
+SetScriptVersion(Version="25.2.170")
+system1 = GetSystem(Name="FFF")
+system1.Delete()
+system2 = GetSystem(Name="SYS")
+geometry1 = system2.GetContainer(ComponentName="Geometry")
+geometry1.SetFile(FilePath="C:/Users/Sebastian/Desktop/Coding/FEM2/Projekt/CAD/Balken_9.stp")
+engineeringData1 = system2.GetContainer(ComponentName="Engineering Data")
+material1 = engineeringData1.GetMaterial(Name="Baustahl")
+matl1 = material1.Duplicate(TargetContainer=engineeringData1)
+matl1.DisplayName = "Nicht-linear "
+matl1.DisplayName = "Nicht-linear 25CrMo4"
+matlProp1 = matl1.CreateProperty(
+    Name="Isotropic Hardening",
+    Definition="Bilinear",
+    Qualifiers={"Definition": "Bilinear", "Behavior": ""})
+matlProp1.SetVariableProperty(
+    VariableName="Tangent Modulus",
+    Property="Unit",
+    Value="MPa")
+matlProp1.SetData(
+    Index=-1,
+    Variables=["Tangent Modulus"],
+    Values=[["2091 [MPa]"]])
+matlProp1.SetVariableProperty(
+    VariableName="Yield Strength",
+    Property="Unit",
+    Value="MPa")
+matlProp1.SetData(
+    Variables=["Yield Strength"],
+    Values=[["7.8886090522101181E-31 [MPa]"]])
+matlProp1.SetData(
+    Variables=["Yield Strength"],
+    Values=[["695 [MPa]"]])
+matlProp2 = matl1.GetProperty(Name="Elasticity")
+matlProp2.SetData(
+    Variables=["Young's Modulus"],
+    Values=[["205000000000 [Pa]"]])
+matlProp2.SetData(
+    Variables=["Poisson's Ratio"],
+    Values=[["0.29"]])
+Save(Overwrite=True)
+modelComponent1 = system2.GetComponent(Name="Model")
+modelComponent1.Refresh()
+model1 = system2.GetContainer(ComponentName="Model")
+model1.Edit()
+matlProp1.SetVariableProperty(
+    VariableName="Yield Strength",
+    Property="Unit",
+    Value="Pa")
+matlProp1.SetData(
+    Variables=["Yield Strength"],
+    Values=[["695000000 [Pa]"]])
+matlProp1.SetVariableProperty(
+    VariableName="Yield Strength",
+    Property="Unit",
+    Value="MPa")
+matlProp1.SetData(
+    Variables=["Yield Strength"],
+    Values=[["695 [MPa]"]])
+matlProp3 = matl1.GetProperty(Name="Tensile Yield Strength")
+matlProp3.SetVariableProperty(
+    VariableName="Tensile Yield Strength",
+    Property="Unit",
+    Value="MPa")
+matlProp3.SetData(
+    Variables=["Tensile Yield Strength"],
+    Values=[["250 [MPa]"]])
+matlProp4 = matl1.GetProperty(Name="Compressive Yield Strength")
+matlProp4.SetVariableProperty(
+    VariableName="Compressive Yield Strength",
+    Property="Unit",
+    Value="MPa")
+matlProp4.SetData(
+    Variables=["Compressive Yield Strength"],
+    Values=[["250 [MPa]"]])
+matlProp5 = matl1.GetProperty(Name="Tensile Ultimate Strength")
+matlProp5.SetVariableProperty(
+    VariableName="Tensile Ultimate Strength",
+    Property="Unit",
+    Value="MPa")
+matlProp5.SetData(
+    Variables=["Tensile Ultimate Strength"],
+    Values=[["460 [MPa]"]])
+matlProp3.SetData(
+    Variables=["Tensile Yield Strength"],
+    Values=[["800 [MPa]"]])
+matlProp5.SetData(
+    Variables=["Tensile Ultimate Strength"],
+    Values=[["900 [MPa]"]])
+matlProp3.SetData(
+    Variables=["Tensile Yield Strength"],
+    Values=[["600 [MPa]"]])
+matlProp6 = matl1.CreateProperty(
+    Name="Kinematic Hardening",
+    Definition="Bilinear",
+    Qualifiers={"Definition": "Bilinear", "Behavior": ""})
+matlProp6.SetData(
+    Index=-1,
+    Variables=["Yield Strength"],
+    Values=[["695 [Pa]"]])
+matlProp6.SetData(
+    Variables=["Tangent Modulus"],
+    Values=[["2091 [Pa]"]])
+Save(Overwrite=True)
