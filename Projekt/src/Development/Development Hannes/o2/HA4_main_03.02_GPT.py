@@ -60,12 +60,44 @@ n_ramp_steps = 5         # sanftes Einschwingen für Newton
 # ==========================================
 # ============ MESH LOADING ============
 # ==========================================
-x, conn, pt_sets, cell_sets, _ = load_mesh(mesh_file, device=device, primary_element_type=element_type)
+try:
+    x, conn, pt_sets, cell_sets, mesh_cells = load_mesh(
+        mesh_file, device=device, primary_element_type="quad8"
+    )
+    element_type = "quad8"
+except Exception as e:
+    print(f"Standard load failed: {e}")
+    print("Attempting fallbacks...")
+    try:
+        x, conn, pt_sets, cell_sets, mesh_cells = load_mesh(
+            mesh_file, device=device, primary_element_type="quad"
+        )
+        element_type = "quad4"
+    except:
+        x, c_dict, pt_sets, cell_sets, mesh_cells = load_mesh(
+            mesh_file, device=device, primary_element_type=None
+        )
+        found_type = None
+        for t in ["quad8", "quad9", "quad", "triangle", "triangle6"]:
+            if t in c_dict:
+                conn = c_dict[t]
+                found_type = t
+                element_type = t
+                break
+        if found_type is None:
+            available = [k for k in c_dict.keys() if k not in ["vertex", "line", "point"]]
+            k = available[0] if available else list(c_dict.keys())[0]
+            conn = c_dict[k]
+            element_type = k
 
-print("Lx =", (x[:,0].max()-x[:,0].min()).item(), "Ly =", (x[:,1].max()-x[:,1].min()).item())
-e0 = conn[0]
-pts = x[e0[:4]]  # grob
-print("approx element size =", torch.norm(pts[1]-pts[0]).item())
+print(f"Loaded mesh with element type: {element_type}")
+
+print(
+    "Lx =",
+    (x[:, 0].max() - x[:, 0].min()).item(),
+    "Ly =",
+    (x[:, 1].max() - x[:, 1].min()).item(),
+)
 
 
 # Fix for "Floating Nodes" (Center nodes of Q9 grid not used by Q8 elements)
@@ -79,59 +111,60 @@ ndf = 2
 # pt_sets is a dictionary: {"Fixed": [indices...], "Loaded": [indices...]}
 
 # --- Boundary Conditions ---
+def extract_nodes_from_sets(mesh_pt_sets, mesh_cell_sets, mesh_cells, target_names):
+    node_indices = set()
+    for name in target_names:
+        if name in mesh_pt_sets:
+            try:
+                # Ensure we have integer indices even if the input is strings or objects
+                indices = np.array(mesh_pt_sets[name]).astype(int)
+                node_indices.update(indices.tolist())
+            except:
+                pass
+    if mesh_cell_sets:
+        for set_name, block_masks in mesh_cell_sets.items():
+            if any(tn.lower() in set_name.lower() for tn in target_names):
+                for b_idx, mask in enumerate(block_masks):
+                    if mask is not None and len(mask) > 0 and b_idx < len(mesh_cells):
+                        mask_arr = np.array(mask)
+                        block_data = mesh_cells[b_idx].data
+                        if np.issubdtype(mask_arr.dtype, np.bool_):
+                            if len(mask_arr) == len(block_data):
+                                node_indices.update(block_data[mask_arr].flatten())
+                        else:
+                            try:
+                                # Ensure integer indices to avoid ufunc errors with strings
+                                indices = mask_arr.astype(int)
+                                valid_indices = indices[indices < len(block_data)]
+                                node_indices.update(block_data[valid_indices].flatten())
+                            except:
+                                continue
+    return list(node_indices)
+
 drlt_bcs = []
 neum_bcs = []
 x_min, x_max = torch.min(x[:, 0]), torch.max(x[:, 0])
 
-# Logic: Check if "Fixed" set exists. If so, use it. Else use coords.
-print("-" * 20)
-if "Fixed" in pt_sets and len(pt_sets["Fixed"]) > 0:
-    print("BC INFO: Using 'Fixed' Node Set from .inp file.")
-    fixed_indices = pt_sets["Fixed"]
-    # Check if indices are 0-based? meshio usually returns 0-based.
-    # Note: pt_sets values are numpy arrays.
-    fixed_nodes = torch.tensor(fixed_indices, dtype=torch.long)
+fixed_nodes = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells, ["Fixed", "Support", "Lager", "Einspannung"])
+if not fixed_nodes:
+    print("BC INFO: Falling back to coordinate search for Fixed nodes.")
+    fixed_nodes = torch.where(torch.abs(x[:, 0] - x_min) < 1e-3)[0]
 else:
-    print("BC INFO: Node Set 'Fixed' NOT found. Fallback to coordinate search.")
-    # Tolerance for fine mesh
-    # x_min/max are scalar tensors, so we use item() for cleaner python float arithmetic if needed, 
-    # or keep torch ops. Newmark task grid is regular.
-    tol = 1e-3 # Stricter tolerance likely needed for fine grid
-    fixed_nodes = torch.where(torch.abs(x[:, 0] - x_min) < tol)[0]
-# RB für Biegung
-# for n in fixed_nodes:
-#     drlt_bcs.append([int(n), 0, 0.0]) # Fix X
-#     drlt_bcs.append([int(n), 1, 0.0]) # Fix Y
-# 1) u_x = 0 auf der linken Kante (alle fixed_nodes)
-
-# ----------------------------------
-# Determine load nodes (right edge)
-# ----------------------------------
-tol = 1e-8
-load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < tol)[0]
-
-
-print(f"BC INFO: Number of load nodes (right edge) = {len(load_nodes)}")
-
+    fixed_nodes = torch.tensor(fixed_nodes, dtype=torch.long)
 
 for n in fixed_nodes:
-    drlt_bcs.append([int(n), 0, 0.0])  # Fix X
+    drlt_bcs.append([int(n), 0, 0.0])
 
 ys = x[fixed_nodes, 1]
 n_ref = int(fixed_nodes[torch.argmin(ys)])
-drlt_bcs.append([n_ref, 1, 0.0])      # nur 1x uy=0 gegen RB
+drlt_bcs.append([n_ref, 1, 0.0])
 
-
-
-# Load at right edge in Y
-if "Loaded" in pt_sets and len(pt_sets["Loaded"]) > 0:
-    print("BC INFO: Using 'Loaded' Node Set from .inp file.")
-    load_indices = pt_sets["Loaded"]
-    load_nodes = torch.tensor(load_indices, dtype=torch.long)
+load_nodes = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells, ["Loaded"])
+if not load_nodes:
+    print("BC INFO: Falling back to coordinate search for Loaded nodes.")
+    load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < 1e-3)[0]
 else:
-    print("BC INFO: Node Set 'Loaded' NOT found. Fallback to coordinate search.")
-    tol = 1e-3
-    load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < tol)[0]
+    load_nodes = torch.tensor(load_nodes, dtype=torch.long)
 
 # Biegung y-Last
 # f_per_node = F_total / max(1, len(load_nodes))
