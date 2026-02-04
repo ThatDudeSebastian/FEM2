@@ -1,3 +1,4 @@
+
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -24,7 +25,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Standard-Datei (Newmark Task)
 mesh_file = os.path.abspath(os.path.join(script_dir, "HA4_src_task", "newmark_task.inp"))
-#mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Beam_Quad8.msh"))
+
+# 2. BENUTZER-DATEI (Hier einkommentieren, um die Standard-Datei zu überschreiben)
+# mesh_file = "/Users/hanne/Desktop/mein_neues_mesh.msh"
+# mesh_file = "/Users/hanne/Desktop/mein_neues_mesh.inp"
 
 print(f"Loading mesh from: {mesh_file}")
 
@@ -194,55 +198,6 @@ print("-" * 20)
 drlt = torch.tensor(drlt_bcs, dtype=torch.float64).reshape(-1, 3)
 neum = torch.tensor(neum_bcs, dtype=torch.float64).reshape(-1, 3)
 
-# ==========================================
-# ============ SETUP VISUALIZATION =========
-# ==========================================
-print("Displaying simulation setup. Please close the plot window to start calculation.")
-limit = float(torch.max(torch.abs(x)) * 1.1)
-fig1, ax1 = plt.subplots(figsize=(8, 8))
-ax1.set_title(f"Simulation Setup\nNodes: {nnp} | Elements: {nel} ({element_type})", fontweight='bold')
-
-# Plot Mesh
-mesh_plotted = False
-if nen == 8:
-    trace_idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
-    for e in range(nel):
-        els = conn[e][trace_idx]
-        label = "Mesh" if not mesh_plotted else None
-        ax1.plot(x[els,0], x[els,1], color='black', lw=0.4, alpha=0.15, label=label)
-        mesh_plotted = True
-else:
-    for e in range(nel):
-        pts = np.append(conn[e].numpy(), conn[e][0].numpy())
-        label = "Mesh" if not mesh_plotted else None
-        ax1.plot(x[pts,0], x[pts,1], color='black', lw=0.4, alpha=0.15, label=label)
-        mesh_plotted = True
-
-# Plot Fixed BCs (Dirichlet)
-drlt_plotted = False
-for bc in drlt:
-    n, d = int(bc[0]), int(bc[1])
-    xn, yn = x[n, 0].item(), x[n, 1].item()
-    label = "Fixed (Drlt)" if not drlt_plotted else None
-    if d == 0: ax1.scatter(xn -0.1, yn, color='green', marker='>', s=35, edgecolors='black', zorder=5, label=label)
-    else: ax1.scatter(xn, yn - 0.1, color='green', marker='^', s=35, edgecolors='black', zorder=5, label=label)
-    drlt_plotted = True
-
-# Plot Loaded BCs (Neumann)
-neum_plotted = False
-for n_f in neum[:, 0].unique().long():
-    label = "Loaded (Neum)" if not neum_plotted else None
-    ax1.arrow(x[n_f, 0].item()-0.3, x[n_f, 1].item(), 0.6, 0,
-          head_width=0.2, head_length=0.2, fc='red', ec='red',
-          zorder=6, clip_on=False, label=label)
-    neum_plotted = True
-
-ax1.set_xlim(-limit, limit); ax1.set_ylim(-limit, limit); ax1.set_aspect('equal')
-ax1.set_xlabel("x [m]"); ax1.set_ylabel("y [m]")
-ax1.grid(True, alpha=0.3)
-ax1.legend(loc='upper right')
-plt.tight_layout()
-plt.show()
 
 # ==========================================
 # ============ CORE SOLVER ============
@@ -1127,9 +1082,34 @@ print(f"TOTAL SIMULATION TIME: {sim_duration:.2f} s")
 
 x_def = x + scale * u.reshape(-1, 2)
 # Re-order connectivity for plotting if Q8 (matplotlib only likes linear quads nicely, or we just plot corners)
+# Q8 order: BL, BR, TR, TL, ...
 # We'll use just the first 4 nodes for the patch plot to keep it simple and working
 plot_conn = conn[:, :4] if nen >= 4 else conn
-fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(16, 7.5))
+limit = torch.max(torch.abs(x)) * 1.1
+
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 7.5))
+
+# 1. Setup
+# 1. Setup
+ax1.set_title("1. Setup & Randbedingungen", fontweight='bold')
+# Plot edges including midside nodes is tricky with simple plot, let's trace 0-4-1-5-2-6-3-7-0 if Q8
+if nen == 8:
+    trace_idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
+    for e in range(nel):
+        els = conn[e][trace_idx]
+        ax1.plot(x[els,0], x[els,1], color='black', lw=0.4, alpha=0.15)
+else:
+    for e in range(nel):
+        pts = np.append(conn[e].numpy(), conn[e][0].numpy())
+        ax1.plot(x[pts,0], x[pts,1], color='black', lw=0.4, alpha=0.15)
+for bc in drlt:
+    n, d = int(bc[0]), int(bc[1])
+    xn, yn = x[n, 0].item(), x[n, 1].item()
+    if d == 0: ax1.scatter(xn - 1.5, yn, color='green', marker='>', s=100, edgecolors='black', zorder=5)
+    else: ax1.scatter(xn, yn - 1.5, color='green', marker='^', s=100, edgecolors='black', zorder=5)
+for n_f in neum[:, 0].unique().long():
+    ax1.arrow(x[n_f, 0].item(), x[n_f, 1].item()+6, 0, -4.5, head_width=1.8, head_length=1.8, fc='red', ec='red', zorder=6)
+ax1.set_xlim(-limit, limit); ax1.set_ylim(-limit, limit); ax1.set_aspect('equal')
 
 # 2. Deformed Displacement [mm]
 ax2.set_title(f"2. Verschiebung [mm] (Skal. {scale:.1f}x)", fontweight='bold')
