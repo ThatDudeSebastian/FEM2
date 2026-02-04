@@ -83,7 +83,7 @@
             <Data format="string">-</Data>
             <Qualifier name="Localized Name">Zug-Streckgrenze</Qualifier>
             <ParameterValue parameter="pa9" format="float">
-              <Data>250000000</Data>
+              <Data>600000000</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Localized Name">Zug-Streckgrenze</Qualifier>
             </ParameterValue>
@@ -92,7 +92,7 @@
             <Data format="string">-</Data>
             <Qualifier name="Localized Name">Max. Zugfestigkeit</Qualifier>
             <ParameterValue parameter="pa10" format="float">
-              <Data>460000000</Data>
+              <Data>900000000</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Localized Name">Max. Zugfestigkeit</Qualifier>
             </ParameterValue>
@@ -342,14 +342,14 @@
             <Qualifier name="Definition">Bilinear</Qualifier>
             <Qualifier name="Table">Plastic</Qualifier>
             <Qualifier name="Active Table">Plastic</Qualifier>
-            <Qualifier name="Localized Name">Bilineare isotrope Verfestigung</Qualifier>
+            <Qualifier name="Localized Name">Bilineare kinematische Verfestigung</Qualifier>
             <ParameterValue parameter="pa30" format="float">
-              <Data>695000000</Data>
+              <Data>695</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Localized Name">Streckgrenze</Qualifier>
             </ParameterValue>
             <ParameterValue parameter="pa31" format="float">
-              <Data>2091000000</Data>
+              <Data>2091</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Localized Name">Tangentenmodul</Qualifier>
             </ParameterValue>
@@ -666,7 +666,7 @@
         </PropertyDetails>
         <PropertyDetails id="pr16">
           <Unitless />
-          <Name>Isotropic Hardening</Name>
+          <Name>Kinematic Hardening</Name>
         </PropertyDetails>
         <PropertyDetails id="pr17">
           <Unitless />

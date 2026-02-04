@@ -25,17 +25,38 @@
  <UNITS>MPA</UNITS>
 </HEADER>
 <COLDATA>
-   0.1000000                    1                1                1    0.1000000        -1.020454         0.000000                    0     8026.074        0.1266410E-03    0.5102272E-01     1.020454                    0    0.3711553E-04                1             UY                519             UY       0.000000                    0             ROTX  
-   0.1000000                    1                1                2    0.1000000        0.5541769E-10     0.000000                    0     8026.074        0.1266410E-03    0.5102272E-01    0.5541769E-10                0    0.3711553E-04                3             UY                519             UY       0.000000                    0             ROTX  
-   0.2000000                    1                2                3    0.1000000        0.3684448E-14     0.000000                    0     16052.15        0.1086040E-03    0.5102272E-01    0.3684448E-14                0    0.2296359E-04               51             UY                228             UY       0.000000                    0             ROTX  
-   0.3000000                    1                3                4    0.1000000       -0.6407476E-14     0.000000                    0     24078.22        0.1706686E-03    0.5102272E-01    0.6407476E-14                0    0.3464287E-04                9             UY                525             UY       0.000000                    0             ROTX  
-   0.4000000                    1                4                5    0.1000000        0.7758165E-14     0.000000                    0     32104.30        0.2221918E-03    0.5102272E-01    0.7758165E-14                0    0.5908904E-04                9             UY                421             UY       0.000000                    0             ROTX  
-   0.5000000                    1                5                6    0.1000000        0.7485439E-14     0.000000                    0     40130.37        0.3092163E-03    0.5102272E-01    0.7485439E-14                0    0.9036611E-04                1             UY                240             UY       0.000000                    0             ROTX  
-   0.6000000                    1                6                7    0.1000000       -0.1372592E-13     0.000000                    0     48156.44        0.3375784E-03    0.5102272E-01    0.1372592E-13                0    0.7110042E-04                1             UY                512             UY       0.000000                    0             ROTX  
-   0.7000000                    1                7                8    0.1000000        0.1452114E-13     0.000000                    0     56182.52        0.4069727E-03    0.5102272E-01    0.1452114E-13                0    0.8164579E-04               10             UY                513             UY       0.000000                    0             ROTX  
-   0.8000000                    1                8                9    0.1000000       -0.1524281E-13     0.000000                    0     64208.59        0.4100825E-03    0.5102272E-01    0.1524281E-13                0    0.1095976E-03                9             UY                531             UY       0.000000                    0             ROTX  
-   0.9000000                    1                9               10    0.1000000        0.1112238E-13     0.000000                    0     72234.66        0.4437671E-03    0.5102272E-01    0.1112238E-13                0    0.8256640E-04               14             UY                524             UY       0.000000                    0             ROTX  
-    1.000000                    1               10               11    0.1000000        0.1284550E-13     0.000000                    0     80260.74        0.6027289E-03    0.5102272E-01    0.1284550E-13                0    0.1699729E-03              231             UY                639             UY       0.000000                    0             ROTX  
+   0.2000000E-01                1                1                1    0.2000000E-01    0.2723042E-06     0.000000                    0    0.4921277E-03    0.3498523E-11    0.1361521E-07    0.2723042E-06                0    0.8215581E-12               15             UX                823             UX       0.000000                    0             ROTX  
+   0.2000000E-01                1                1                2    0.2000000E-01    0.2157467E-14     0.000000                    0    0.4921277E-03    0.3498523E-11    0.9958756E-03    0.2157467E-14                0    0.8215581E-12               15             UY                823             UX       0.000000                    0             ROTX  
+   0.4000000E-01                1                2                3    0.2000000E-01    0.1776912E-16     0.000000                    0    0.9842554E-03    0.3131026E-13    0.9958756E-03    0.1776912E-16                0    0.3592612E-14               15             UX                 91             UX       0.000000                    0             ROTX  
+   0.7000000E-01                1                3                4    0.3000000E-01    0.3331687E-16     0.000000                    0    0.1722447E-02    0.4498925E-13    0.9958756E-03    0.3331687E-16                0    0.6014394E-14                1             UX                986             UX       0.000000                    0             ROTX  
+   0.1033333                    1                4                5    0.3333333E-01    0.4689183E-16     0.000000                    0    0.2542660E-02    0.5181430E-13    0.9958756E-03    0.4689183E-16                0    0.5924142E-14                1             UX                999             UX       0.000000                    0             ROTX  
+   0.1366667                    1                5                6    0.3333333E-01    0.4935977E-16     0.000000                    0    0.3362873E-02    0.5156079E-13    0.9958756E-03    0.4935977E-16                0    0.5344284E-14              821             UX                956             UX       0.000000                    0             ROTX  
+   0.1700000                    1                6                7    0.3333333E-01    0.4935730E-16     0.000000                    0    0.4183086E-02    0.5378038E-13    0.9958756E-03    0.4935730E-16                0    0.5523360E-14                1             UX                 50             UX       0.000000                    0             ROTX  
+   0.2033333                    1                7                8    0.3333333E-01    0.4935814E-16     0.000000                    0    0.5003299E-02    0.5122168E-13    0.9958756E-03    0.4935814E-16                0    0.5382471E-14                1             UX               1004             UX       0.000000                    0             ROTX  
+   0.2366667                    1                8                9    0.3333333E-01    0.4936030E-16     0.000000                    0    0.5823511E-02    0.5215634E-13    0.9958756E-03    0.4936030E-16                0    0.5967331E-14              819             UX                993             UX       0.000000                    0             ROTX  
+   0.2700000                    1                9               10    0.3333333E-01    0.4937330E-16     0.000000                    0    0.6643724E-02    0.5160826E-13    0.9958756E-03    0.4937330E-16                0    0.5349131E-14               15             UX               1088             UX       0.000000                    0             ROTX  
+   0.3033333                    1               10               11    0.3333333E-01    0.4937691E-16     0.000000                    0    0.7463937E-02    0.5129908E-13    0.9958756E-03    0.4937691E-16                0    0.4936689E-14                1             UX               1028             UX       0.000000                    0             ROTX  
+   0.3366667                    1               11               12    0.3333333E-01    0.4937999E-16     0.000000                    0    0.8284150E-02    0.5275052E-13    0.9958756E-03    0.4937999E-16                0    0.5587986E-14               15             UX               1207             UX       0.000000                    0             ROTX  
+   0.3700000                    1               12               13    0.3333333E-01    0.4936807E-16     0.000000                    0    0.9104363E-02    0.5257149E-13    0.9958756E-03    0.4936807E-16                0    0.5481819E-14                1             UX                997             UX       0.000000                    0             ROTX  
+   0.4033333                    1               13               14    0.3333333E-01    0.4936393E-16     0.000000                    0    0.9924576E-02    0.4997734E-13    0.9958756E-03    0.4936393E-16                0    0.4978121E-14                3             UX                930             UX       0.000000                    0             ROTX  
+   0.4366667                    1               14               15    0.3333333E-01    0.4936474E-16     0.000000                    0    0.1074479E-01    0.5281792E-13    0.9958756E-03    0.4936474E-16                0    0.5274428E-14              825             UX                989             UX       0.000000                    0             ROTX  
+   0.4700000                    1               15               16    0.3333333E-01    0.4936394E-16     0.000000                    0    0.1156500E-01    0.5214803E-13    0.9958756E-03    0.4936394E-16                0    0.6744605E-14              819             UX                 46             UX       0.000000                    0             ROTX  
+   0.5033333                    1               16               17    0.3333333E-01    0.4937615E-16     0.000000                    0    0.1238521E-01    0.5335157E-13    0.9958756E-03    0.4937615E-16                0    0.5582474E-14               15             UX               1069             UX       0.000000                    0             ROTX  
+   0.5366667                    1               17               18    0.3333333E-01    0.4935971E-16     0.000000                    0    0.1320543E-01    0.5174105E-13    0.9958756E-03    0.4935971E-16                0    0.4941529E-14              819             UX               1084             UX       0.000000                    0             ROTX  
+   0.5700000                    1               18               19    0.3333333E-01    0.4937454E-16     0.000000                    0    0.1402564E-01    0.4991168E-13    0.9958756E-03    0.4937454E-16                0    0.6613490E-14               15             UX                982             UX       0.000000                    0             ROTX  
+   0.6033333                    1               19               20    0.3333333E-01    0.4936084E-16     0.000000                    0    0.1484585E-01    0.5286077E-13    0.9958756E-03    0.4936084E-16                0    0.5134781E-14               13             UX                 79             UX       0.000000                    0             ROTX  
+   0.6366667                    1               20               21    0.3333333E-01    0.4936506E-16     0.000000                    0    0.1566607E-01    0.5853459E-13    0.9958756E-03    0.4936506E-16                0    0.1798561E-13              819             UX               1061             UX       0.000000                    0             ROTX  
+   0.6700000                    1               21               22    0.3333333E-01    0.4936537E-16     0.000000                    0    0.1648628E-01    0.5529867E-13    0.9958756E-03    0.4936537E-16                0    0.5544083E-14               15             UX               1242             UX       0.000000                    0             ROTX  
+   0.7033333                    1               22               23    0.3333333E-01    0.4937087E-16     0.000000                    0    0.1730649E-01    0.5273177E-13    0.9958756E-03    0.4937087E-16                0    0.5712815E-14               15             UX                973             UX       0.000000                    0             ROTX  
+   0.7366667                    1               23               24    0.3333333E-01    0.4938769E-16     0.000000                    0    0.1812670E-01    0.5382011E-13    0.9958756E-03    0.4938769E-16                0    0.5467848E-14                1             UX                 26             UX       0.000000                    0             ROTX  
+   0.7700000                    1               24               25    0.3333333E-01    0.4938365E-16     0.000000                    0    0.1894692E-01    0.5314239E-13    0.9958756E-03    0.4938365E-16                0    0.5820844E-14               15             UX               1004             UX       0.000000                    0             ROTX  
+   0.8033333                    1               25               26    0.3333333E-01    0.4939475E-16     0.000000                    0    0.1976713E-01    0.5196465E-13    0.9958756E-03    0.4939475E-16                0    0.5523360E-14                1             UX                 53             UX       0.000000                    0             ROTX  
+   0.8366667                    1               26               27    0.3333333E-01    0.4938378E-16     0.000000                    0    0.2058734E-01    0.5467436E-13    0.9958756E-03    0.4938378E-16                0    0.6112357E-14               15             UX                960             UX       0.000000                    0             ROTX  
+   0.8700000                    1               27               28    0.3333333E-01    0.4936295E-16     0.000000                    0    0.2140756E-01    0.5487329E-13    0.9958756E-03    0.4936295E-16                0    0.6162201E-14              819             UX                984             UX       0.000000                    0             ROTX  
+   0.9033333                    1               28               29    0.3333333E-01    0.4935330E-16     0.000000                    0    0.2222777E-01    0.5349451E-13    0.9958756E-03    0.4935330E-16                0    0.5525677E-14                1             UX                999             UX       0.000000                    0             ROTX  
+   0.9366667                    1               29               30    0.3333333E-01    0.4937107E-16     0.000000                    0    0.2304798E-01    0.5219542E-13    0.9958756E-03    0.4937107E-16                0    0.5554629E-14              824             UX                963             UX       0.000000                    0             ROTX  
+   0.9700000                    1               30               31    0.3333333E-01    0.4938421E-16     0.000000                    0    0.2386819E-01    0.5409014E-13    0.9958756E-03    0.4938421E-16                0    0.5981483E-14              819             UX                954             UX       0.000000                    0             ROTX  
+    1.000000                    1               31               32    0.3000000E-01    0.4218690E-16     0.000000                    0    0.2460639E-01    0.4753018E-13    0.9958756E-03    0.4218690E-16                0    0.4752486E-14              825             UX               1071             UX       0.000000                    0             ROTX  
 </COLDATA>
 </LOADSTEPDATA>
 <LOADSTEPDATA>
@@ -64,266 +85,23 @@
  <UNITS>MPA</UNITS>
 </HEADER>
 <COLDATA>
-    1.200000                    2                1               12    0.2000000       -0.1190281E-13     0.000000                    0     80260.74        0.5623334E-03    0.5102272E-01    0.1190281E-13                0    0.1195762E-03              231             UY                422             UY       0.000000                    0             ROTX  
-    1.400000                    2                2               13    0.2000000        0.1760653E-13     0.000000                    0     80260.74        0.6238646E-03    0.5102272E-01    0.1760653E-13                0    0.1716907E-03                1             UY                638             UY       0.000000                    0             ROTX  
-    1.700000                    2                3               14    0.3000000       -0.2189534E-13     0.000000                    0     80260.74        0.5448184E-03    0.5102272E-01    0.2189534E-13                0    0.1308359E-03                1             UY                536             UY       0.000000                    0             ROTX  
-    2.000000                    2                4               15    0.3000000        0.1523104E-13     0.000000                    0     80260.74        0.6336590E-03    0.5102272E-01    0.1523104E-13                0    0.1936976E-03                1             UY                138             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    2.200000                    3                1               16    0.2000000        0.6959896E-14     0.000000                    0     80260.74        0.6121684E-03    0.5102272E-01    0.6959896E-14                0    0.1679710E-03              235             UY                138             UY       0.000000                    0             ROTX  
-    2.400000                    3                2               17    0.2000000        0.1190103E-13     0.000000                    0     80260.74        0.6185375E-03    0.5102272E-01    0.1190103E-13                0    0.1986609E-03              229             UY                638             UY       0.000000                    0             ROTX  
-    2.700000                    3                3               18    0.3000000       -0.1189014E-13     0.000000                    0     80260.74        0.5560370E-03    0.5102272E-01    0.1189014E-13                0    0.1453843E-03              239             UY                422             UY       0.000000                    0             ROTX  
-    3.000000                    3                4               19    0.3000000       -0.1834835E-13     0.000000                    0     80260.74        0.6043556E-03    0.5102272E-01    0.1834835E-13                0    0.1254936E-03              326             UY                421             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    3.200000                    4                1               20    0.2000000       -0.7159573E-14     0.000000                    0     80260.74        0.6042772E-03    0.5102272E-01    0.7159573E-14                0    0.1250138E-03                5             UY                415             UY       0.000000                    0             ROTX  
-    3.400000                    4                2               21    0.2000000        0.1089868E-13     0.000000                    0     80260.74        0.5566468E-03    0.5102272E-01    0.1089868E-13                0    0.1671840E-03              231             UY                537             UY       0.000000                    0             ROTX  
-    3.700000                    4                3               22    0.3000000        0.1467655E-13     0.000000                    0     80260.74        0.5604836E-03    0.5102272E-01    0.1467655E-13                0    0.1532501E-03              404             UY                548             UY       0.000000                    0             ROTX  
-    4.000000                    4                4               23    0.3000000       -0.1651715E-13     0.000000                    0     80260.74        0.5356953E-03    0.5102272E-01    0.1651715E-13                0    0.1103613E-03              541             UY                419             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    4.200000                    5                1               24    0.2000000        0.9863602E-14     0.000000                    0     80260.74        0.5603573E-03    0.5102272E-01    0.9863602E-14                0    0.1091205E-03               51             UY                232             UY       0.000000                    0             ROTX  
-    4.400000                    5                2               25    0.2000000       -0.1499593E-13     0.000000                    0     80260.74        0.5390417E-03    0.5102272E-01    0.1499593E-13                0    0.1358008E-03               51             UY                242             UY       0.000000                    0             ROTX  
-    4.700000                    5                3               26    0.3000000       -0.1424185E-13     0.000000                    0     80260.74        0.6364508E-03    0.5102272E-01    0.1424185E-13                0    0.1321509E-03              595             UY                246             UY       0.000000                    0             ROTX  
-    5.000000                    5                4               27    0.3000000        0.1562693E-13     0.000000                    0     80260.74        0.5948774E-03    0.5102272E-01    0.1562693E-13                0    0.1886718E-03              253             UY                240             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    5.200000                    6                1               28    0.2000000        0.1333115E-13     0.000000                    0     80260.74        0.6207985E-03    0.5102272E-01    0.1333115E-13                0    0.1227790E-03              228             UY                419             UY       0.000000                    0             ROTX  
-    5.400000                    6                2               29    0.2000000       -0.1711582E-13     0.000000                    0     80260.74        0.5790525E-03    0.5102272E-01    0.1711582E-13                0    0.1230967E-03              228             UY                183             UY       0.000000                    0             ROTX  
-    5.700000                    6                3               30    0.3000000        0.1839207E-13     0.000000                    0     80260.74        0.5892527E-03    0.5102272E-01    0.1839207E-13                0    0.1259057E-03              231             UY                409             UY       0.000000                    0             ROTX  
-    6.000000                    6                4               31    0.3000000       -0.1753129E-13     0.000000                    0     80260.74        0.6092569E-03    0.5102272E-01    0.1753129E-13                0    0.1399494E-03              326             UY                547             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    6.200000                    7                1               32    0.2000000       -0.6849265E-14     0.000000                    0     80260.74        0.6053123E-03    0.5102272E-01    0.6849265E-14                0    0.1374609E-03              232             UY                537             UY       0.000000                    0             ROTX  
-    6.400000                    7                2               33    0.2000000        0.9976138E-14     0.000000                    0     80260.74        0.5245529E-03    0.5102272E-01    0.9976138E-14                0    0.1137950E-03               12             UY                547             UY       0.000000                    0             ROTX  
-    6.700000                    7                3               34    0.3000000       -0.9760302E-14     0.000000                    0     80260.74        0.5263893E-03    0.5102272E-01    0.9760302E-14                0    0.1253313E-03               97             UY                542             UY       0.000000                    0             ROTX  
-    7.000000                    7                4               35    0.3000000       -0.1664771E-13     0.000000                    0     80260.74        0.5590563E-03    0.5102272E-01    0.1664771E-13                0    0.1403331E-03               51             UY                548             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    7.200000                    8                1               36    0.2000000       -0.7244070E-14     0.000000                    0     80260.74        0.5385759E-03    0.5102272E-01    0.7244070E-14                0    0.1308068E-03               97             UY                422             UY       0.000000                    0             ROTX  
-    7.400000                    8                2               37    0.2000000        0.1516145E-13     0.000000                    0     80260.74        0.5718766E-03    0.5102272E-01    0.1516145E-13                0    0.1271546E-03              180             UY                419             UY       0.000000                    0             ROTX  
-    7.700000                    8                3               38    0.3000000       -0.1973341E-13     0.000000                    0     80260.74        0.6658470E-03    0.5102272E-01    0.1973341E-13                0    0.1630983E-03              241             UY                547             UY       0.000000                    0             ROTX  
-    8.000000                    8                4               39    0.3000000        0.2535413E-13     0.000000                    0     80260.74        0.6832474E-03    0.5102272E-01    0.2535413E-13                0    0.1761336E-03                3             UY                547             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    8.200000                    9                1               40    0.2000000       -0.4067434E-14     0.000000                    0     80260.74        0.6138745E-03    0.5102272E-01    0.4067434E-14                0    0.1453229E-03              185             UY                140             UY       0.000000                    0             ROTX  
-    8.400000                    9                2               41    0.2000000       -0.1884166E-13     0.000000                    0     80260.74        0.5999516E-03    0.5102272E-01    0.1884166E-13                0    0.1312005E-03                1             UY                531             UY       0.000000                    0             ROTX  
-    8.700000                    9                3               42    0.3000000        0.2732854E-13     0.000000                    0     80260.74        0.5393361E-03    0.5102272E-01    0.2732854E-13                0    0.1497157E-03                1             UY                419             UY       0.000000                    0             ROTX  
-    9.000000                    9                4               43    0.3000000       -0.1240875E-13     0.000000                    0     80260.74        0.5812913E-03    0.5102272E-01    0.1240875E-13                0    0.1283796E-03              400             UY                542             UY       0.000000                    0             ROTX  
-</COLDATA>
-</LOADSTEPDATA>
-<LOADSTEPDATA>
-<HEADER>
- <COLUMN ID="    1">Time</COLUMN>
- <COLUMN ID="    2">Load Step</COLUMN>
- <COLUMN ID="    3">Sub-step</COLUMN>
- <COLUMN ID="    4">Cum Iter</COLUMN>
- <COLUMN ID="    5">Time Incr</COLUMN>
- <COLUMN ID="    6">Max DOF Incr</COLUMN>
- <COLUMN ID="    7">Line Search Parameter</COLUMN>
- <COLUMN ID="    8">Bisection</COLUMN>
- <COLUMN ID="    9">F   CRIT</COLUMN>
- <COLUMN ID="   10">F    L2 </COLUMN>
- <COLUMN ID="   11">U   CRIT</COLUMN>
- <COLUMN ID="   12">U    INF</COLUMN>
- <COLUMN ID="   13">Remesh</COLUMN>
- <COLUMN ID="   14">Max Resi F</COLUMN>
- <COLUMN ID="   15">Node with Max DOF Incr</COLUMN>
- <COLUMN ID="   16">DOF with Max DOF Incr</COLUMN>
- <COLUMN ID="   17">Node with Max Resi F</COLUMN>
- <COLUMN ID="   18">DOF with Max Resi F</COLUMN>
- <COLUMN ID="   19">Max Resi M</COLUMN>
- <COLUMN ID="   20">Node with Max Resi M</COLUMN>
- <COLUMN ID="   21">DOF with Max Resi M</COLUMN>
- <UNITS>MPA</UNITS>
-</HEADER>
-<COLDATA>
-    9.200000                   10                1               44    0.2000000        0.1024220E-13     0.000000                    0     80260.74        0.6288078E-03    0.5102272E-01    0.1024220E-13                0    0.1423839E-03               91             UY                419             UY       0.000000                    0             ROTX  
-    9.400000                   10                2               45    0.2000000       -0.1572886E-13     0.000000                    0     80260.74        0.5960806E-03    0.5102272E-01    0.1572886E-13                0    0.1202978E-03              408             UY                182             UY       0.000000                    0             ROTX  
-    9.700000                   10                3               46    0.3000000        0.2284593E-13     0.000000                    0     80260.74        0.4987014E-03    0.5102272E-01    0.2284593E-13                0    0.9489106E-04               51             UY                548             UY       0.000000                    0             ROTX  
-    10.00000                   10                4               47    0.3000000       -0.1984983E-13     0.000000                    0     80260.74        0.6280128E-03    0.5102272E-01    0.1984983E-13                0    0.2295040E-03               51             UY                639             UY       0.000000                    0             ROTX  
+    1.050000                    2                1               33    0.5000000E-01    0.1312506E-05     0.000000                    0    0.2697844E-01    0.1769543E-09    0.9958756E-03    0.1312506E-05                0    0.5395795E-10               15             UX                822             UX       0.000000                    0             ROTX  
+    1.100000                    2                2               34    0.5000000E-01   -0.8590718E-15     0.000000                    0    0.2935050E-01    0.1492488E-12    0.9958756E-03    0.8590718E-15                0    0.1484299E-13               15             UX                958             UX       0.000000                    0             ROTX  
+    1.150000                    2                3               35    0.5000000E-01    0.1048713E-14     0.000000                    0    0.3172255E-01    0.1548900E-12    0.9958756E-03    0.1048713E-14                0    0.2575717E-13               15             UX               1772             UX       0.000000                    0             ROTX  
+    1.200000                    2                4               36    0.5000000E-01    0.4128402E-15     0.000000                    0    0.3409461E-01    0.1541464E-12    0.9958756E-03    0.4128402E-15                0    0.1749614E-13                1             UX                999             UX       0.000000                    0             ROTX  
+    1.250000                    2                5               37    0.5000000E-01    0.4128368E-15     0.000000                    0    0.3646666E-01    0.1594259E-12    0.9958756E-03    0.4128368E-15                0    0.2615424E-13              825             UX               1101             UX       0.000000                    0             ROTX  
+    1.300000                    2                6               38    0.5000000E-01    0.4128442E-15     0.000000                    0    0.3883872E-01    0.2057968E-12    0.9958756E-03    0.4128442E-15                0    0.9880985E-13                1             UX                940             UX       0.000000                    0             ROTX  
+    1.350000                    2                7               39    0.5000000E-01    0.4128149E-15     0.000000                    0    0.4121078E-01    0.1904921E-12    0.9958756E-03    0.4128149E-15                0    0.6239453E-13              824             UX               1512             UX       0.000000                    0             ROTX  
+    1.400000                    2                8               40    0.5000000E-01    0.4128372E-15     0.000000                    0    0.4358283E-01    0.1576235E-12    0.9958756E-03    0.4128372E-15                0    0.1582430E-13                3             UX               1004             UX       0.000000                    0             ROTX  
+    1.450000                    2                9               41    0.5000000E-01    0.4128018E-15     0.000000                    0    0.4595489E-01    0.1991569E-12    0.9958756E-03    0.4128018E-15                0    0.4618528E-13              825             UX               1258             UX       0.000000                    0             ROTX  
+    1.500000                    2               10               42    0.5000000E-01    0.8958336E-08     0.000000                    0    0.4835354E-01    0.1372011E-02    0.9958756E-03    0.8958336E-08                0    0.7073563E-03              922             UX                922             UX       0.000000                    0             ROTX  
+    1.550000                    2               11               43    0.5000000E-01    0.2437773E-08     0.000000                    0    0.5076699E-01    0.1359632E-03    0.9958756E-03    0.2437773E-08                0    0.7234193E-04              818             UX                818             UX       0.000000                    0             ROTX  
+    1.600000                    2               12               44    0.5000000E-01    0.3153317E-09     0.000000                    0    0.5318554E-01    0.5044338E-05    0.9958756E-03    0.3153317E-09                0    0.3012601E-05              818             UX                818             UX       0.000000                    0             ROTX  
+    1.650000                    2               13               45    0.5000000E-01     3.990034         0.000000                    0    0.5568012E-01     33.52541        0.1995018         3.990034                    0     7.847924                    1             UX               2003             UX       0.000000                    0             ROTX  
+    1.650000                    2               13               46    0.5000000E-01     21.29795         0.000000                    0    0.5532106E-01     34.70811         1.264399         21.29795                    0     6.309409                   15             UX               2081             UX       0.000000                    0             ROTX  
+    1.650000                    2               13               47    0.5000000E-01    -2.646105         0.000000                    0    0.5531522E-01     45.23237         1.264399         2.646105                    0     8.543316                 1956             UX               1968             UX       0.000000                    0             ROTX  
+    1.650000                    2               13               48    0.5000000E-01     140.8438         0.000000                    0    0.5654716E-01     161.8582         7.205606         140.8438                    0     64.62270                 1956             UX               2002             UY       0.000000                    0             ROTX  
+    1.650000                    2               13               49    0.5000000E-01    -122.6182         0.000000                    0     0.000000         161.8582         0.000000         122.6182                    0     64.62270                 1959             UX               2002             UY       0.000000                    0             ROTX  
 </COLDATA>
 </LOADSTEPDATA>
 </SOLUTION>

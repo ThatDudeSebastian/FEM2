@@ -17,8 +17,8 @@ def create_wheel_mesh():
     radii = [R_inner, R1, R2, R_outer]
     
     # Total span of the model: 60 degrees centered at bottom (-90 deg)
-    angle_start = math.radians(-80)
-    angle_end = math.radians(-100)
+    angle_start = math.radians(-87.5)
+    angle_end = math.radians(-92.5)
     angle_bottom = math.radians(-90)
     
     # Load area angles (exactly 5 nodes = 4 intervals)
@@ -35,16 +35,16 @@ def create_wheel_mesh():
     
     # Radial divisions
     # Outer layer (R2-R_outer): Very fine
-    n_rad_outer = 32 
+    n_rad_outer = 16
     # Middle layer: Transitioning towards contact
-    n_rad_middle = 16
+    n_rad_middle = 8
     # Inner layer: Biased towards hole
-    n_rad_inner = 12
+    n_rad_inner = 5
     
     # Circumferential divisions
     # We'll keep the partitions but let's use the progression to coarse them inwards
-    n_load = 41 # Nodes at the bottom contact strip
-    n_side = 25 
+    n_load = 10 # Nodes at the bottom contact strip
+    n_side = 4
     
     # Create center point
     center = gmsh.model.geo.addPoint(0, 0, 0)
@@ -93,11 +93,11 @@ def create_wheel_mesh():
     # Meshing Constraints
     for a_idx in range(4):
         # Layer 0: Inner - Bias towards R_inner (coef > 1 means growth away from start)
-        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][0], n_rad_inner, coef=1.2)
+        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][0], n_rad_inner, coef=-1.2)
         # Layer 1: Middle - Bias towards contact part (R2)
-        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][1], n_rad_middle, coef=0.85)
+        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][1], n_rad_middle, coef=1)
         # Layer 2: Outer - Inflation layer (fine towards R_outer)
-        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][2], n_rad_outer, coef=0.75)
+        gmsh.model.geo.mesh.setTransfiniteCurve(rad_lines[a_idx][2], n_rad_outer, coef=0.85)
             
     # Circumferential
     for r_idx in range(4):
@@ -124,9 +124,9 @@ def create_wheel_mesh():
     gmsh.model.mesh.generate(2)
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(script_dir, "src", "mesh")
+    output_dir = os.path.join(script_dir, "mesh")
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "Wheel_Refined.msh")
+    output_file = os.path.join(output_dir, "Radausschnitt_Quad8.msh")
     gmsh.write(output_file)
     print(f"Refined graded mesh saved to {output_file}")
     

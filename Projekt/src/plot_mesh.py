@@ -184,7 +184,7 @@ def plot_mesh(filepath):
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # Fix case sensitivity and default path
-    default_file = os.path.join(script_dir, "mesh", "Wheel_Refined.msh")
+    default_file = os.path.join(script_dir, "mesh", "Radausschnitt_Quad8.msh")
     
     if len(sys.argv) > 1:
         file_to_plot = sys.argv[1]

@@ -1,55 +1,32 @@
-/COM,ANSYS RELEASE 2025 R2           BUILD 25.2      UP20250519       21:04:37
+/COM,ANSYS RELEASE 2025 R2           BUILD 25.2      UP20250519       16:09:07
 
- *** WARNING ***                         CP =       0.328   TIME= 21:04:38
+ *** WARNING ***                         CP =       0.297   TIME= 16:09:08
  Element shape checking is currently inactive.  Issue SHPP,ON or         
  SHPP,WARN to reactivate, if desired.                                    
 
- *** WARNING ***                         CP =       0.328   TIME= 21:04:38
- Material number 2 (used by element 181) should normally have at least   
+ *** WARNING ***                         CP =       0.297   TIME= 16:09:08
+ Material number 2 (used by element 631) should normally have at least   
  one MP or one TB type command associated with it.  Output of energy by  
  material may not be available.                                          
 
- *** WARNING ***                         CP =       0.781   TIME= 21:04:39
- Material number 2 (used by element 181) should normally have at least   
+ *** WARNING ***                         CP =       1.719   TIME= 16:09:10
+ Material number 2 (used by element 631) should normally have at least   
  one MP or one TB type command associated with it.  Output of energy by  
  material may not be available.                                          
 
- *** WARNING ***                         CP =       0.922   TIME= 21:04:39
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
+ *** ERROR ***                           CP =       2.344   TIME= 16:09:11
+ Element 49 (type = 1, PLANE183) (and maybe other elements) has become   
+ highly distorted.  Excessive distortion of elements is usually a        
+ symptom indicating the need for corrective action elsewhere.  Try       
+ incrementing the load more slowly (increase the number of substeps or   
+ decrease the time step size).  You may need to improve your mesh to     
+ obtain elements with better aspect ratios.  Also consider the behavior  
+ of materials, contact pairs, and/or constraint equations.  Please rule  
+ out other root causes of this failure before attempting rezoning or     
+ nonlinear adaptive solutions.  If this message appears in the first     
+ iteration of first substep, be sure to perform element shape checking.  
 
- *** WARNING ***                         CP =       1.125   TIME= 21:04:39
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
-
- *** WARNING ***                         CP =       1.312   TIME= 21:04:39
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
-
- *** WARNING ***                         CP =       1.516   TIME= 21:04:40
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
-
- *** WARNING ***                         CP =       1.719   TIME= 21:04:40
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
-
- *** WARNING ***                         CP =       1.906   TIME= 21:04:40
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
-
- *** WARNING ***                         CP =       2.062   TIME= 21:04:41
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
-
- *** WARNING ***                         CP =       2.172   TIME= 21:04:41
- Material number 2 (used by element 181) should normally have at least   
- one MP or one TB type command associated with it.  Output of energy by  
- material may not be available.                                          
+ *** WARNING ***                         CP =       2.344   TIME= 16:09:11
+ The unconverged solution (identified as time 2 substep 999999) is       
+ output for analysis debug purposes.  Results should not be used for     
+ any other purpose.                                                      

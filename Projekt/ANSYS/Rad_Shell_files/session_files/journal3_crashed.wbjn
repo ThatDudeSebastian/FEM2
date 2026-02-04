@@ -1,0 +1,39 @@
+# encoding: utf-8
+# 2025 R2
+SetScriptVersion(Version="25.2.170")
+system1 = GetSystem(Name="SYS")
+modelComponent1 = system1.GetComponent(Name="Model")
+modelComponent1.Refresh()
+model1 = system1.GetContainer(ComponentName="Model")
+model1.Edit()
+template1 = GetTemplate(TemplateName="External Data")
+system2 = template1.CreateSystem(
+    Position="Right",
+    RelativeTo=system1)
+setup1 = system2.GetContainer(ComponentName="Setup")
+externalLoadFileData1 = setup1.AddDataFile(FilePath="C:/Users/Sebastian/Desktop/Coding/FEM2/Projekt/results/lastkurve.csv")
+externalLoadFileData1.SetAsMaster(Master=True)
+externalLoadFileData1.SetAsMaster(Master=False)
+externalLoadFileDataProperty1 = externalLoadFileData1.GetDataProperty()
+externalLoadColumnData1 = externalLoadFileDataProperty1.GetColumnData(Name="ExternalLoadColumnData 1")
+externalLoadFileDataProperty1.SetColumnDataType(
+    ColumnData=externalLoadColumnData1,
+    DataType="Force")
+externalLoadFileData1.SetStartImportAtLine(
+    FileDataProperty=externalLoadFileDataProperty1,
+    LineNumber=2)
+externalLoadFileDataProperty1.SetDimensionType(Dimensions="Dimension2D")
+setupComponent1 = system2.GetComponent(Name="Setup")
+setupComponent1.Update(AllDependencies=True)
+setupComponent2 = system1.GetComponent(Name="Setup")
+setupComponent1.TransferData(TargetComponent=setupComponent2)
+setupComponent2.Update(AllDependencies=True)
+setupComponent1.Update(AllDependencies=True)
+externalLoadFileData1.ModifyFileData(FilePath=r"C:\Users\Sebastian\Desktop\Coding\FEM2\Projekt\results\lastkurve_ANSYS.csv")
+externalLoadColumnData2 = externalLoadFileDataProperty1.GetColumnData(Name="ExternalLoadColumnData")
+externalLoadFileDataProperty1.SetColumnDataType(
+    ColumnData=externalLoadColumnData2,
+    DataType="Force")
+setupComponent1.Update(AllDependencies=True)
+setupComponent1.TransferData(TargetComponent=setupComponent2)
+setupComponent2.Update(AllDependencies=True)

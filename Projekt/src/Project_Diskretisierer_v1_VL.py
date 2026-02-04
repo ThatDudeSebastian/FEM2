@@ -11,6 +11,7 @@ import math
 import os
 from tqdm import tqdm
 from mesh_utils import load_mesh, get_bcs_from_sets
+
 import time
 
 # ============ SETTINGS & CONFIG ===========
@@ -24,7 +25,7 @@ interactive_hover = True
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Standard-Datei (Newmark Task)
-mesh_file = os.path.abspath(os.path.join(script_dir, "HA4_src_task", "newmark_task.inp"))
+mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Radausschnitt_Quad8.msh"))
 
 # 2. BENUTZER-DATEI (Hier einkommentieren, um die Standard-Datei zu überschreiben)
 # mesh_file = "/Users/hanne/Desktop/mein_neues_mesh.msh"
@@ -42,13 +43,23 @@ width = 0.00583
 
 sigma_y = 350e6    # Fließspannung
 H = 209e7          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
-r = 1.0            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
+r = 0.35            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
-F_total = -2500000.0 
+F_total = -5.3e4     # Normalkraft wie Overlreaf
+a_hz = 0.0035        # halbbreite / hertz kontaktradius 
+
+# Compute p0 so that resultant equals F_total
+p0_hz = (2.0 * F_total) / (math.pi * a_hz * width)  # [Pa]
+
+def p_hertz(s):
+    if abs(s) >= a_hz:
+        return 0.0
+    return p0_hz * math.sqrt(max(0.0, 1.0 - (s / a_hz) ** 2))
+
 
 # --- Cyclic force loading ---
-n_cycles = 2.0
+n_cycles = 1.0
 n_steps_per_cycle = 60
 n_steps = n_cycles * n_steps_per_cycle
 
@@ -98,6 +109,12 @@ print(
     "Ly =",
     (x[:, 1].max() - x[:, 1].min()).item(),
 )
+# --- UNIT FIX: mesh likely in mm -> convert to m for SI consistency ---
+Lx_val = float((x[:, 0].max() - x[:, 0].min()).item())
+if Lx_val > 10.0:  # heuristic: >10 => probably mm
+    print("UNIT INFO: Detected mm-scale mesh. Converting coordinates x from mm to m (x *= 1e-3).")
+    x = x * 1e-3
+
 
 
 # Fix for "Floating Nodes" (Center nodes of Q9 grid not used by Q8 elements)
@@ -159,78 +176,218 @@ ys = x[fixed_nodes, 1]
 n_ref = int(fixed_nodes[torch.argmin(ys)])
 drlt_bcs.append([n_ref, 1, 0.0])
 
-load_nodes = extract_nodes_from_sets(pt_sets, cell_sets, mesh_cells, ["Loaded"])
-if not load_nodes:
-    print("BC INFO: Falling back to coordinate search for Loaded nodes.")
-    load_nodes = torch.where(torch.abs(x[:, 0] - x_max) < 1e-3)[0]
-else:
-    load_nodes = torch.tensor(load_nodes, dtype=torch.long)
+# ---------------------------------------------------------
+# HERTZ PRESSURE LOAD on bottom contact patch (Wheel-Rail)
+# ---------------------------------------------------------
 
-# Biegung y-Last
-# f_per_node = F_total / max(1, len(load_nodes))
-# for n in load_nodes:
-#     neum_bcs.append([int(n), 1, f_per_node])
-# [V7 FIX] Q8 Consistent Nodal Loads (Simpson's Rule 1/6 : 4/6 : 1/6)
-# Uniform force on Q8 quadratic edge nodes causes distortion ("collapsed elements").
-# We must distribute F_total according to shape functions.
-if 'quad8' in element_type or nen == 8:
-    print("BC INFO: Calculating consistent nodal loads for Q8 elements...")
-    node_weights = torch.zeros(nnp)
-    
-    # Identify right edge elements
-    for e in range(nel):
-        n_idx = conn[e] # 0-7
-        # Right edge in local Q8 indexing (Counter-Clockwise from BL):
-        # 0(BL), 1(BR), 2(TR), 3(TL), 4(B), 5(R), 6(T), 7(L)
-        # Right edge nodes: 1 (Corner), 2 (Corner), 5 (Midside)
-        edge_nodes = [n_idx[1], n_idx[2], n_idx[5]]
-        
-        # Check if this edge is on the load boundary aka all nodes in load_nodes
-        # (We converted load_nodes to tensor earlier, let's use set for speed or just tensor checks)
-        # load_nodes is a tensor of indices.
-        
-        on_boundary = True
-        for en in edge_nodes:
-            if not torch.isin(en, load_nodes):
-                on_boundary = False
-                break
-        
-        if on_boundary:
-            # Add weights: Corners get 1, Midside gets 4
-            # Logic: Integral of N_i over edge length L_e. 
-            # int N_corner = L_e/6, int N_mid = 4L_e/6.
-            # We treat L_e as uniform.
-            node_weights[edge_nodes[0]] += 1.0
-            node_weights[edge_nodes[1]] += 1.0
-            node_weights[edge_nodes[2]] += 4.0
+# Hertz pressure profile p(s) [Pa] along local tangent coordinate s (|s|<=a_hz)
+p0_hz = (2.0 * F_total) / (math.pi * a_hz * width)   # [Pa]
 
-    # Extract sum of weights for loaded nodes only
-    total_weight = torch.sum(node_weights[load_nodes])
-    if total_weight == 0:
-        print("WARNING: No Q8 boundary edges found matching load_nodes! Fallback to uniform.")
-        f_per_node = F_total / max(1, len(load_nodes))
-        for n in load_nodes:
-            neum_bcs.append([int(n), 0, f_per_node])
-    else:
-        print(f"BC INFO: Distributed Force using Q8 consistent weights (Total W={total_weight})")
-        for n in load_nodes:
-            w = node_weights[n]
-            if w > 0:
-                f_n = (w / total_weight) * F_total
-                neum_bcs.append([int(n), 0, float(f_n)])
+def p_hertz(s):
+    # s in meters along tangent; returns pressure [Pa]
+    ss = abs(s)
+    if ss >= a_hz:
+        return 0.0
+    return p0_hz * math.sqrt(max(0.0, 1.0 - (s / a_hz) ** 2))
 
-else:
-    # Linear elements / Fallback
-    f_per_node = F_total / max(1, len(load_nodes))
-    for n in load_nodes:
-        neum_bcs.append([int(n), 0, f_per_node])  # dof=0 => x
+# Build boundary edges (Q8): each edge = (corner1, corner2, midside)
+# Local Q8 nodes: 0 BL,1 BR,2 TR,3 TL,4 B,5 R,6 T,7 L
+q8_edges = [
+    (0, 1, 4),  # bottom
+    (1, 2, 5),  # right
+    (2, 3, 6),  # top
+    (3, 0, 7),  # left
+]
 
-    
-print("-" * 20)
+# Count how many times each corner-pair appears -> boundary edges appear once
+edge_count = {}
+edge_data = {}  # key -> (e, (n1,n2,nm))
+for e in range(nel):
+    n_idx = conn[e]
+    for (i1, i2, im) in q8_edges:
+        n1 = int(n_idx[i1]); n2 = int(n_idx[i2]); nm = int(n_idx[im])
+        key = tuple(sorted((n1, n2)))
+        edge_count[key] = edge_count.get(key, 0) + 1
+        # store one representative; ok because boundary edges are unique anyway
+        edge_data[key] = (e, (n1, n2, nm))
+
+boundary_edges = [edge_data[k][1] for k, c in edge_count.items() if c == 1]
+
+# Determine wheel center (geometric) and contact point (lowest boundary node)
+#    (If you know the exact center: set it directly instead!)
+x_np = x.detach().cpu().numpy()
+wheel_center = np.array([x_np[:, 0].mean(), x_np[:, 1].mean()])
+
+# collect boundary nodes to get y_min on boundary
+b_nodes = set()
+for (n1, n2, nm) in boundary_edges:
+    b_nodes.add(n1); b_nodes.add(n2); b_nodes.add(nm)
+
+b_nodes = np.array(list(b_nodes), dtype=int)
+ymin = x_np[b_nodes, 1].min()
+i_contact = b_nodes[np.argmin(x_np[b_nodes, 1])]
+x_contact = np.array([x_np[i_contact, 0], x_np[i_contact, 1]])
+
+# Local normal (radial) and tangent at contact
+n_rad = x_contact - wheel_center
+n_rad /= (np.linalg.norm(n_rad) + 1e-15)
+# outward radial ~ points down at bottom; inward-to-wheel normal for pressure is opposite of outward surface normal.
+# Here we take pressure direction "into wheel" = -outward = -n_rad (works for convex wheel)
+n_in = -n_rad
+t_hat = np.array([-n_in[1], n_in[0]])  # tangent
+
+# Select only bottom-contact edges: near ymin and within |s|<=a_hz
+y_tol = 1e-3 * (x_np[:, 1].max() - x_np[:, 1].min() + 1e-12)  # relative tol
+contact_edges = []
+for (n1, n2, nm) in boundary_edges:
+    y1 = x_np[n1, 1]; y2 = x_np[n2, 1]; ym = x_np[nm, 1]
+    # must be on bottom arc region
+    if (y1 - ymin) > y_tol or (y2 - ymin) > y_tol:
+        continue
+
+    # mid-point local coordinate along tangent
+    xm = np.array([x_np[nm, 0], x_np[nm, 1]])
+    s_mid = float(np.dot((xm - x_contact), t_hat))
+
+    if abs(s_mid) <= a_hz:
+        contact_edges.append((n1, n2, nm))
+
+print(f"HERTZ: found {len(contact_edges)} boundary edges in contact patch.")
+
+# Integrate pressure along each 3-node quadratic edge and accumulate nodal forces
+# 3-pt Gauss on [-1,1]
+gp = [-math.sqrt(3.0/5.0), 0.0, math.sqrt(3.0/5.0)]
+gw = [5.0/9.0, 8.0/9.0, 5.0/9.0]
+
+# quadratic line shape functions (node1 at xi=-1, node2 at xi=+1, node3 at xi=0)
+def N_line_q2(xi):
+    N1 = 0.5 * xi * (xi - 1.0)
+    N2 = 0.5 * xi * (xi + 1.0)
+    N3 = 1.0 - xi*xi
+    return np.array([N1, N2, N3])
+
+def dN_line_q2(xi):
+    dN1 = xi - 0.5
+    dN2 = xi + 0.5
+    dN3 = -2.0 * xi
+    return np.array([dN1, dN2, dN3])
+
+# accumulate forces per node (2 dofs)
+node_F = {}  # node -> [Fx, Fy]
+for (n1, n2, nm) in contact_edges:
+    X1 = np.array([x_np[n1,0], x_np[n1,1]])
+    X2 = np.array([x_np[n2,0], x_np[n2,1]])
+    Xm = np.array([x_np[nm,0], x_np[nm,1]])
+
+    X = np.vstack([X1, X2, Xm])  # order matches N_line_q2: [node1,node2,node3]
+
+    for xi, w in zip(gp, gw):
+        Nsh = N_line_q2(xi)
+        dNsh = dN_line_q2(xi)
+
+        # physical point on edge
+        xg = Nsh[0]*X1 + Nsh[1]*X2 + Nsh[2]*Xm
+
+        # edge tangent derivative dx/dxi
+        dx_dxi = dNsh[0]*X1 + dNsh[1]*X2 + dNsh[2]*Xm
+        ds = np.linalg.norm(dx_dxi)  # since xi in [-1,1], ds = |dx/dxi| dxi
+        if ds < 1e-15:
+            continue
+
+        # local coordinate along tangent from contact point
+        s_loc = float(np.dot((xg - x_contact), t_hat))
+
+        p = p_hertz(s_loc)  # [Pa]
+        if p <= 0.0:
+            continue
+
+        # direction: into wheel (approx constant in patch; for curved patch you could recompute radial per xg)
+        # Here: use radial at xg for slightly better direction:
+        nvec = (xg - wheel_center)
+        nvec /= (np.linalg.norm(nvec) + 1e-15)
+        nvec_in = -nvec
+
+        dF = p * width * ds * w  # [N] since ds includes Jacobian from xi
+
+        # distribute to the 3 nodes using shape functions
+        fvec = dF * nvec_in
+        for node, Ni in zip([n1, n2, nm], [Nsh[0], Nsh[1], Nsh[2]]):
+            if node not in node_F:
+                node_F[node] = np.array([0.0, 0.0])
+            node_F[node] += Ni * fvec
+
+# Convert to neum_bcs list: one entry per node and dof
+neum_bcs = []
+for node, Fxy in node_F.items():
+    neum_bcs.append([int(node), 0, float(Fxy[0])])  # Fx
+    neum_bcs.append([int(node), 1, float(Fxy[1])])  # Fy
+
+# Define load_nodes for tracking (nodes that actually carry Hertz load)
+load_nodes = torch.tensor(sorted(list(node_F.keys())), dtype=torch.long)
+
+if len(load_nodes) == 0:
+    print("WARNING: No load_nodes found (no Hertz edges). Tracking will use a fallback node.")
+    load_nodes = fixed_nodes[:1].clone()  # minimal fallback to avoid crash
+
+
+
+# 7) Sanity check: resultant should be about -F_total in normal direction (sign depends on n_in choice)
+Fx_sum = sum(bc[2] for bc in neum_bcs if bc[1] == 0)
+Fy_sum = sum(bc[2] for bc in neum_bcs if bc[1] == 1)
+print(f"HERTZ: Sum Fx={Fx_sum:.3e} N, Sum Fy={Fy_sum:.3e} N (target magnitude ~ {F_total:.3e} N)")
 
 drlt = torch.tensor(drlt_bcs, dtype=torch.float64).reshape(-1, 3)
 neum = torch.tensor(neum_bcs, dtype=torch.float64).reshape(-1, 3)
 
+# ==========================================
+# ============ SETUP VISUALIZATION =========
+# ==========================================
+print("Displaying simulation setup. Please close the plot window to start calculation.")
+limit = float(torch.max(torch.abs(x)) * 1.1)
+fig1, ax1 = plt.subplots(figsize=(8, 8))
+ax1.set_title(f"Simulation Setup\nNodes: {nnp} | Elements: {nel} ({element_type})", fontweight='bold')
+
+# Plot Mesh
+mesh_plotted = False
+if nen == 8:
+    trace_idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
+    for e in range(nel):
+        els = conn[e][trace_idx]
+        label = "Mesh" if not mesh_plotted else None
+        ax1.plot(x[els,0], x[els,1], color='black', lw=0.4, alpha=0.15, label=label)
+        mesh_plotted = True
+else:
+    for e in range(nel):
+        pts = np.append(conn[e].numpy(), conn[e][0].numpy())
+        label = "Mesh" if not mesh_plotted else None
+        ax1.plot(x[pts,0], x[pts,1], color='black', lw=0.4, alpha=0.15, label=label)
+        mesh_plotted = True
+
+# Plot Fixed BCs (Dirichlet)
+drlt_plotted = False
+for bc in drlt:
+    n, d = int(bc[0]), int(bc[1])
+    xn, yn = x[n, 0].item(), x[n, 1].item()
+    label = "Fixed (Drlt)" if not drlt_plotted else None
+    if d == 0: ax1.scatter(xn -0.1, yn, color='green', marker='>', s=35, edgecolors='black', zorder=5, label=label)
+    else: ax1.scatter(xn, yn - 0.1, color='green', marker='^', s=35, edgecolors='black', zorder=5, label=label)
+    drlt_plotted = True
+
+# Plot Loaded BCs (Neumann)
+neum_plotted = False
+for n_f in neum[:, 0].unique().long():
+    label = "Loaded (Neum)" if not neum_plotted else None
+    ax1.arrow(x[n_f, 0].item()-0.3, x[n_f, 1].item(), 0.6, 0,
+          head_width=0.2, head_length=0.2, fc='red', ec='red',
+          zorder=6, clip_on=False, label=label)
+    neum_plotted = True
+
+ax1.set_xlim(-limit, limit); ax1.set_ylim(-limit, limit); ax1.set_aspect('equal')
+ax1.set_xlabel("x [m]"); ax1.set_ylabel("y [m]")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc='upper right')
+plt.tight_layout()
+plt.show()
 
 # ==========================================
 # ============ CORE SOLVER ============
@@ -1120,29 +1277,7 @@ x_def = x + scale * u.reshape(-1, 2)
 plot_conn = conn[:, :4] if nen >= 4 else conn
 limit = torch.max(torch.abs(x)) * 1.1
 
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 7.5))
-
-# 1. Setup
-# 1. Setup
-ax1.set_title("1. Setup & Randbedingungen", fontweight='bold')
-# Plot edges including midside nodes is tricky with simple plot, let's trace 0-4-1-5-2-6-3-7-0 if Q8
-if nen == 8:
-    trace_idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
-    for e in range(nel):
-        els = conn[e][trace_idx]
-        ax1.plot(x[els,0], x[els,1], color='black', lw=0.4, alpha=0.15)
-else:
-    for e in range(nel):
-        pts = np.append(conn[e].numpy(), conn[e][0].numpy())
-        ax1.plot(x[pts,0], x[pts,1], color='black', lw=0.4, alpha=0.15)
-for bc in drlt:
-    n, d = int(bc[0]), int(bc[1])
-    xn, yn = x[n, 0].item(), x[n, 1].item()
-    if d == 0: ax1.scatter(xn - 1.5, yn, color='green', marker='>', s=100, edgecolors='black', zorder=5)
-    else: ax1.scatter(xn, yn - 1.5, color='green', marker='^', s=100, edgecolors='black', zorder=5)
-for n_f in neum[:, 0].unique().long():
-    ax1.arrow(x[n_f, 0].item(), x[n_f, 1].item()+6, 0, -4.5, head_width=1.8, head_length=1.8, fc='red', ec='red', zorder=6)
-ax1.set_xlim(-limit, limit); ax1.set_ylim(-limit, limit); ax1.set_aspect('equal')
+fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(16, 7.5))
 
 # 2. Deformed Displacement [mm]
 ax2.set_title(f"2. Verschiebung [mm] (Skal. {scale:.1f}x)", fontweight='bold')
