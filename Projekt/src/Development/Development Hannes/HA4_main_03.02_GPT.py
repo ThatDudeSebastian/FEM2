@@ -42,7 +42,7 @@ width = 0.00583
 
 sigma_y = 350e6    # Fließspannung
 H = 209e7          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
-r = 0.0            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
+r = 0.2            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
 F_total = -2500000.0 
@@ -1273,30 +1273,71 @@ if len(k_hist) > 0:
     plt.plot(x0/1e6, y0/1e6, 'k--', lw=2.5, label="Initial (Yield)")
     plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.5, label="Aktuell (Hardened)")
     
-    plt.plot(x1/1e6, y1/1e6, 'r-',  lw=2.5, label="Aktuell (Hardened)")
-    
     # Plane Strain Limit Lines (s1 - s2 = +/- 2/sqrt(3) * sig_eff)
+    # MUST BE SHIFTED BY BACKSTRESS (beta) for Kinematic Hardening!
+    # The condition is on (sigma - beta).
+    # (s1 - b1) - (s2 - b2) = +/- limit
+    # s2 = s1 - (b1 - b2) +/- limit
+    
     sig_eff_current = sigma_y + r*H*k1
     limit_val = (2.0 / math.sqrt(3.0)) * sig_eff_current / 1e6
     
-    # Determine plot bounds based on Yield Surface and History
-    x_min_plot = min(np.min(x1/1e6), np.min(sig_1_hist))
-    x_max_plot = max(np.max(x1/1e6), np.max(sig_1_hist))
-    margin = (x_max_plot - x_min_plot) * 0.3
-    x_range = np.linspace(x_min_plot - margin, x_max_plot + margin, 100)
+    # Backstress shift for limits
+    b1 = beta1[0,0]
+    b2 = beta1[1,1]
+    shift_limit = float(b1 - b2) / 1e6
+    
+    # Plot Center of Yield Surface
+    plt.plot(b1/1e6, b2/1e6, 'rx', markersize=8, markeredgewidth=1.2, label="Center (Backstress)")
 
-    # Line 1: s1 - s2 = limit_val => s2 = s1 - limit_val
-    # Line 2: s1 - s2 = -limit_val => s2 = s1 + limit_val
-    plt.plot(x_range, x_range - limit_val, 'r:', lw=1.5, alpha=0.6, label="PE Limit")
-    plt.plot(x_range, x_range + limit_val, 'r:', lw=1.5, alpha=0.6)
+    # Determine plot bounds based on Yield Surface and History
+    # Use x1 (current surface) to frame the view
+    x_min_surf = np.min(x1/1e6); x_max_surf = np.max(x1/1e6)
+    y_min_surf = np.min(y1/1e6); y_max_surf = np.max(y1/1e6)
+    
+    # Include history (path)
+    if len(sig_1_hist) > 0:
+        x_min_hist = np.min(sig_1_hist); x_max_hist = np.max(sig_1_hist)
+        y_min_hist = np.min(sig_2_hist); y_max_hist = np.max(sig_2_hist)
+    else:
+        x_min_hist=x_min_surf; x_max_hist=x_max_surf
+        y_min_hist=y_min_surf; y_max_hist=y_max_surf
+
+    # Combine
+    x_min_plot = min(x_min_surf, x_min_hist)
+    x_max_plot = max(x_max_surf, x_max_hist)
+    y_min_plot = min(y_min_surf, y_min_hist)
+    y_max_plot = max(y_max_surf, y_max_hist)
+
+    # Add 25% margin
+    width_x = x_max_plot - x_min_plot
+    height_y = y_max_plot - y_min_plot
+    # Make it square-ish based on the larger dimension
+    dim = max(width_x, height_y)
+    cx = 0.5*(x_min_plot + x_max_plot)
+    cy = 0.5*(y_min_plot + y_max_plot)
+    
+    margin = dim * 0.35
+    x_lo, x_hi = cx - 0.5*dim - margin, cx + 0.5*dim + margin
+    y_lo, y_hi = cy - 0.5*dim - margin, cy + 0.5*dim + margin
+
+    # Generate limit lines across this SPECIFIC view range
+    # User Request: Crop limit lines to be flush with yield surface logic
+    # We use the surface bounds for the limits, maybe slightly wider
+    x_range_limits = np.linspace(x_min_surf - (width_x*0.1), x_max_surf + (width_x*0.1), 100)
+
+    # Line 1: s2 = s1 - shift_limit - limit_val
+    plt.plot(x_range_limits, x_range_limits - shift_limit - limit_val, 'r:', lw=1.5, alpha=0.6, label="PE Limit")
+    # Line 2: s2 = s1 - shift_limit + limit_val
+    plt.plot(x_range_limits, x_range_limits - shift_limit + limit_val, 'r:', lw=1.5, alpha=0.6)
     
     # Plot Stress Path Trajectory
     if len(sig_1_hist) > 0:
         plt.plot(sig_1_hist, sig_2_hist, 'b-', lw=1.5, alpha=0.7, label="Stress Path")
         plt.plot(sig_1_hist[-1], sig_2_hist[-1], 'bo', markersize=6, label="Current State")
     
-    plt.xlim(x_min_plot - margin, x_max_plot + margin)
-    plt.ylim(x_min_plot - margin, x_max_plot + margin)  # Keep roughly square aspect
+    plt.xlim(x_lo, x_hi)
+    plt.ylim(y_lo, y_hi)
     plt.xlabel(r"HS $\sigma_1$ [MPa]")
     plt.ylabel(r"HS $\sigma_2$ [MPa]")
     plt.title(f"Fließfläche im HS-Raum (r={r:.2f})")
