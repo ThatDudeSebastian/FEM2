@@ -8,8 +8,8 @@ def create_wheel_mesh():
     gmsh.model.add("Wheel2D")
 
     # Dimensions
-    R_inner = 100.0  # Inner radius (hole)
-    R_outer = 300.0  # Outer radius
+    R_inner = 100.0  # Inner radius (hole) in mm
+    R_outer = 460.0  # Outer radius in mm
     
     # Radial partitions (3 Layers)
     R1 = 150.0

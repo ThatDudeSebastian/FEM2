@@ -28,7 +28,7 @@ forces = [f * F_total for f in factors]
 plt.figure(figsize=(10, 5))
 plt.plot(steps, forces, 'b-o', markersize=4, label="Kraftverlauf")
 plt.axhline(0, color='black', lw=1)
-plt.xlabel("Step / Zeit")
+plt.xlabel("Steps / Zeit")
 plt.ylabel("Kraft [N]")
 plt.title("Sinusförmige Lastkurve")
 plt.grid(True)

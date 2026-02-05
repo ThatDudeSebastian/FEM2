@@ -11,6 +11,11 @@ import os
 from tqdm import tqdm
 from mesh_utils import load_mesh, get_bcs_from_sets
 import time
+try:
+    import fem_postprocessing as fp
+    MODULAR_POST = True
+except ImportError:
+    MODULAR_POST = False
 
 # ============ SETTINGS & CONFIG ===========
 
@@ -1367,3 +1372,25 @@ else:
 
 plt.tight_layout()
 plt.show()
+
+# --- MODULAR POST-PROCESSING (Redundant / Outsource Test) ---
+if MODULAR_POST:
+    print("\nStarting modular post-processing...")
+    # 1. Spatial Results
+    fp.plot_spatial_results(
+        f"Modular: Displacement & Stress (Balken, Step {step-1})",
+        x_def.numpy(), conn, element_type, element_results, interactive=interactive_hover,
+        save_path="spatial_results_balken.png"
+    )
+    
+    # 2. History Results
+    fp.plot_history_overview(
+        disp_pl, load_hist, load_target_hist, 
+        eps_p_xx_hist, sig_yy_hist, eps_p_eq_hist, sig_eq_hist, 
+        sig_1_hist, sig_2_hist, k_hist, a_hist, 
+        sigma_y, H, r,
+        save_path="history_results_balken.png"
+    )
+    plt.show()
+
+print(f"Balken Simulation complete. Duration: {sim_duration:.2f}s")
