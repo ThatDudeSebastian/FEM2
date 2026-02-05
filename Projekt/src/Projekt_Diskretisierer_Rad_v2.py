@@ -47,7 +47,7 @@ def p_hertz(s):
 
 # --- Cyclic force loading ---
 n_cycles = 1.0
-n_steps_per_cycle = 30
+n_steps_per_cycle = 60
 n_steps = n_cycles * n_steps_per_cycle
 F_amp = F_total
 use_ramp_in = True
@@ -239,6 +239,17 @@ else:
 C4 = torch.zeros(2,2,2,2); mu=E/(2*(1+nu)); lam=(E*nu)/((1+nu)*(1-2*nu))
 C4[0,0,0,0]=C4[1,1,1,1]=lam+2*mu; C4[0,0,1,1]=C4[1,1,0,0]=lam; C4[0,1,0,1]=C4[1,0,0,1]=C4[0,1,1,0]=C4[1,0,1,0]=mu
 
+# Pre-calculate 4th-order identity tensors for speed
+I3 = torch.eye(3, dtype=torch.float64)
+I4s = torch.zeros(3,3,3,3, dtype=torch.float64)
+for i in range(3):
+    for j in range(3):
+        for k2 in range(3):
+            for l2 in range(3):
+                I4s[i,j,k2,l2] = 0.5*((1.0 if (i==k2 and j==l2) else 0.0) + (1.0 if (i==l2 and j==k2) else 0.0))
+IoxI = torch.einsum("ij,kl->ijkl", I3, I3)
+Idev_sym = I4s - (1.0/3.0)*IoxI
+
 def von_mises_return(eps2, state):
     mu = E / (2.0 * (1.0 + nu))
     K = E / (3.0 * (1.0 - 2.0 * nu))
@@ -288,17 +299,7 @@ def von_mises_return(eps2, state):
     c1 = 2.0*mu * (1.0 - (A_fac * dlam / (norm_red + 1e-15)))
     c2 = 2.0*mu * A_fac * (dlam / (norm_red + 1e-15) - 1.0/B)
     
-    # Helpers for 4th order assembly
-    I4s = torch.zeros(3,3,3,3, dtype=torch.float64)
-    for i in range(3):
-        for j in range(3):
-            for k2 in range(3):
-                for l2 in range(3):
-                    I4s[i,j,k2,l2] = 0.5*((1.0 if (i==k2 and j==l2) else 0.0) + (1.0 if (i==l2 and j==k2) else 0.0))
-    IoxI = torch.einsum("ij,kl->ijkl", I3, I3)
-    Idev_sym = I4s - (1.0/3.0)*IoxI
     vv = torch.einsum("ij,kl->ijkl", v, v)
-    
     Ct_4th = K*IoxI + c1*Idev_sym + c2*vv
     Ct2 = Ct_4th[:2, :2, :2, :2]
     

@@ -29,7 +29,7 @@ mesh_file = os.path.abspath(os.path.join(script_dir, "HA4_src_task", "newmark_ta
 print(f"Loading mesh from: {mesh_file}")
 
 # For Newmark task, we used Q8 elements (8 nodes)
-element_type = 'quad8' 
+element_type = 'quad8'
 
 # --- Material Parameters ---
 E = 205e9
@@ -41,7 +41,7 @@ H = 209e7          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
 r = 0.2            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
-F_total = -2500000.0 
+F_total = -2500000.0
 
 # --- Cyclic force loading ---
 n_cycles = 2.0
@@ -319,6 +319,17 @@ C4[0,1,1,0] = mu
 C4[1,0,1,0] = mu
 
 
+# Pre-calculate 4th-order identity tensors for speed
+I3_global = torch.eye(3, dtype=torch.float64)
+I4s_global = torch.zeros(3,3,3,3, dtype=torch.float64)
+for i in range(3):
+    for j in range(3):
+        for k2 in range(3):
+            for l2 in range(3):
+                I4s_global[i,j,k2,l2] = 0.5*((1.0 if (i==k2 and j==l2) else 0.0) +
+                                             (1.0 if (i==l2 and j==k2) else 0.0))
+IoxI_global = torch.einsum("ij,kl->ijkl", I3_global, I3_global)
+Idev_sym_global = I4s_global - (1.0/3.0)*IoxI_global
 
 def von_mises_return(eps2, state):
     """
@@ -374,18 +385,7 @@ def von_mises_return(eps2, state):
 
     # elastic
     if float(Phi_tr) <= 0.0:
-        # elastic tangent (3D)
-        I4s = torch.zeros(3,3,3,3, dtype=torch.float64)
-        for i in range(3):
-            for j in range(3):
-                for k2 in range(3):
-                    for l2 in range(3):
-                        I4s[i,j,k2,l2] = 0.5*((1.0 if (i==k2 and j==l2) else 0.0) +
-                                              (1.0 if (i==l2 and j==k2) else 0.0))
-        IoxI = torch.einsum("ij,kl->ijkl", I3, I3)
-        Pdev = I4s - (1.0/3.0)*IoxI
-        C3 = K*IoxI + 2.0*mu*Pdev
-
+        C3 = K*IoxI_global + 2.0*mu*Idev_sym_global
         Ct2 = C3[0:2, 0:2, 0:2, 0:2]
         sig2 = sig_trial[0:2, 0:2]
         state_new = {"ep": ep, "k": k, "a": a}
@@ -414,21 +414,11 @@ def von_mises_return(eps2, state):
     sig = s_new + p*I3
 
     # consistent algorithmic tangent (PDF Eq. 6.61-6.63)
-    I4s = torch.zeros(3,3,3,3, dtype=torch.float64)
-    for i in range(3):
-        for j in range(3):
-            for k2 in range(3):
-                for l2 in range(3):
-                    I4s[i,j,k2,l2] = 0.5*((1.0 if (i==k2 and j==l2) else 0.0) +
-                                          (1.0 if (i==l2 and j==k2) else 0.0))
-    IoxI = torch.einsum("ij,kl->ijkl", I3, I3)
-    Idev_sym = I4s - (1.0/3.0)*IoxI
-
     c1 = 2.0*mu * (1.0 - (A/float(norm_red))*dlam)
     c2 = 2.0*mu * A * (dlam/float(norm_red) - 1.0/float(B))
 
     vv = torch.einsum("ij,kl->ijkl", v, v)
-    C3 = K*IoxI + c1*Idev_sym + c2*vv
+    C3 = K*IoxI_global + c1*Idev_sym_global + c2*vv
 
     Ct2 = C3[0:2, 0:2, 0:2, 0:2]
     sig2 = sig[0:2, 0:2]
