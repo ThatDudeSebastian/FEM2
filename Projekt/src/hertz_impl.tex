@@ -1,0 +1,61 @@
+\subsection{Numerische Implementierung der Hertzschen Pressung}
+
+Die Einleitung der Radaufstandskraft $F_{total}$ erfolgt im Modell nicht als vereinfachte Punktlast, sondern als physikalisch basierte, elliptische Druckverteilung gemäß der Hertzschen Kontaktheorie. Da die Finite-Elemente-Methode auf diskreten Knotenkräften basiert, muss die kontinuierliche Druckfunktion $p(s)$ in konsistente Knotenkräfte umgerechnet werden.
+
+\subsubsection{Berechnung der Druckverteilung}
+Die maximale Pressung $p_0$ im Zentrum des Kontakts und die Halbachsen $a_{Hz}$ (in Rollrichtung) und $b_{Hz}$ (quer zur Rollrichtung) definieren die Druckverteilung. Der Druck $p(s)$ an einer Position $s$ entlang des Radumfangs (Bogenlänge vom Kontaktmittelpunkt) berechnet sich zu:
+\begin{equation}
+    p(s) = p_0 \cdot \sqrt{1 - \left(\frac{s}{a_{Hz}}\right)^2} \quad \text{für } |s| \le a_{Hz}
+\end{equation}
+wobei $p(s) = 0$ für $|s| > a_{Hz}$.
+
+\subsubsection{Diskretisierung und Integration}
+Die algorithmische Umsetzung im Python-Skript (\texttt{Diskretisierer\_Rad.py}) erfolgt in den folgenden Schritten:
+
+\begin{enumerate}
+    \item \textbf{Identifikation des Kontaktpunkts:} 
+    Zunächst wird der Knoten mit der minimalen y-Koordinate identifiziert ($y_{min}$), welcher das Zentrum des Kontakts darstellt. Der Normalenvektor im Kontaktpunkt zeigt radial nach innen.
+
+    \item \textbf{Selektion der Kontakt-Elementkanten:} 
+    Es werden alle Randkanten der Elemente ermittelt, deren Knoten sich innerhalb des Einflussbereiches $s \in [-1.2 a_{Hz}, 1.2 a_{Hz}]$ befinden. Dies stellt sicher, dass der gesamte lasttragende Bereich erfasst wird.
+
+    \item \textbf{Numerische Integration (Gauss-Quadratur):} 
+    Die Überführung der kontinuierlichen Last in Knotenkräfte erfolgt durch Integration über die Elementkanten mittels der Formfunktionen $N(\xi)$. Für jede betroffene Kante wird eine 3-Punkt-Gauss-Integration durchgeführt:
+    \begin{equation}
+        \mathbf{F}_{Kante} = \int_{-1}^{1} \mathbf{N}(\xi)^T \cdot p(s(\xi)) \cdot b_{Hz} \cdot \det(J) \, d\xi
+    \end{equation}
+    Hierbei ist:
+    \begin{itemize}
+        \item $\xi$: Die lokale Koordinate des Elements (Isoparametrischer Raum).
+        \item $\mathbf{N}(\xi)$: Der Vektor der quadratischen Formfunktionen (für Quad8-Elemente).
+        \item $s(\xi)$: Die physische Bogenlänge relativ zum Kontaktzentrum.
+        \item $\det(J)$: Die Determinante der Jacobi-Matrix (Umrechnung von lokal zu global).
+        \item $b_{Hz}$: Die Kontaktbreite (in Querrichtung, hier als Tiefenmaß angenommen).
+    \end{itemize}
+
+    \item \textbf{Assemblierung:} 
+    Die berechneten Kräfteanteile an den Integrationspunkten werden auf die drei Knoten der quadratischen Kante (zwei Eckknoten, ein Mittelknoten) verteilt und zum globalen Lastvektor addiert.
+\end{enumerate}
+
+\subsubsection{Identifikation der Randknoten}
+Die Selektion der relevanten Knoten für die Randbedingungen und Lasteinleitung erfolgt in einer robusten zweistufigen Logik (im Skript \texttt{Diskretisierer\_Rad.py}):
+
+\begin{enumerate}
+    \item \textbf{Verwendung definierter Node-Sets:} 
+    Zunächst durchsucht der Algorithmus die im Mesh definierten ,,Physical Groups``. 
+    \begin{itemize}
+        \item Für die \textbf{Festhaltung (Nabe)} wird nach Sets mit Namen wie ,,Fixed``, ,,Support`` oder ,,Hub`` gesucht.
+        \item Für die \textbf{Lauffläche (Kontaktbereich)} wird nach Sets wie ,,Loaded``, ,,Tread`` oder ,,Aussen`` gesucht.
+    \end{itemize}
+    
+    \item \textbf{Geometrischer Fallback:} 
+    Sollten keine entsprechenden Sets im Mesh vorhanden sein (z.B. bei reinem Geometrie-Import), greift ein Fallback-Mechanismus, der auf den radialen Koordinaten basiert:
+    \begin{itemize}
+        \item Die \textbf{Nabenknoten} werden als diejenigen Knoten identifiziert, deren Radius $r = \sqrt{x^2+y^2}$ dem minimalen Radius des Modells entspricht (Innenradius).
+        \item Die \textbf{Laufflächenknoten} entsprechen den Knoten auf dem maximalen Radius (Außenradius).
+    \end{itemize}
+\end{enumerate}
+
+Aus der Menge der so identifizierten Laufflächenknoten wird anschließend, wie in Abschnitt 2.1 beschrieben, durch geometrische Projektion auf die Tangente im Kontaktpunkt die tatsächliche Kontaktzone ($|s| \le 1.2 a_{Hz}$) herausgefiltert. Dies stellt sicher, dass die analytische Druckverteilung präzise an der geometrisch korrekten Stelle aufgebracht wird, unabhängig von der diskreten Netzstruktur.
+
+Durch dieses Vorgehen (konsistente Knotenlasten) wird eine wesentlich höhere Genauigkeit erreicht als durch bloße Aufteilung der Gesamtkraft auf die nächstgelegenen Knoten, da die Position der Last relativ zum Netz berücksichtigt wird.

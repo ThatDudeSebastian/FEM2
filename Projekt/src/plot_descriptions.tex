@@ -1,0 +1,23 @@
+\subsection{Diskussion der Ergebnisse}
+
+Im Folgenden werden die simulierten Zeitverläufe und Hysteresen kurz erläutert.
+
+\subsubsection{Räumliche Verteilung (Verschiebung und Spannung)}
+Die räumliche Darstellung (Abb. \ref{fig:spatial_results}) zeigt den finalen Verformungs- und Spannungszustand des Radausschnitts.
+Links ist der Betrag der Verschiebung dargestellt, wobei die Abplattung im Kontaktbereich deutlich erkennbar ist.
+Rechts ist die Von-Mises-Vergleichsspannung aufgetragen. Charakteristisch für den Hertzschen Kontakt liegt das Spannungsmaximum nicht direkt an der Oberfläche, sondern leicht darunter im Materialinneren. Dies bestätigt qualitativ die korrekte Abbildung des Kontaktproblems.
+
+\subsubsection{Kraft-Weg-Diagramm}
+Das Kraft-Weg-Diagramm (Abb. \ref{fig:force_disp}) stellt das globale Strukturverhalten dar. Aufgetragen ist die vertikale Radaufstandskraft über der vertikalen Verschiebung eines repräsentativen Punktes im Kontaktbereich. Aufgrund des elastisch-plastischen Materialverhaltens zeigt sich ein nichtlinearer Verlauf. Bei der Entlastung folgt das System einem anderen Pfad als bei der Belastung, wodurch eine Hystereseschleife entsteht. Die eingeschlossene Fläche entspricht der im Gesamtzyklus dissipierten plastischen Energie.
+
+\subsubsection{Lokale Spannungs-Dehnungs-Hysterese}
+Abbildung \ref{fig:hysteresis} zeigt den Zusammenhang zwischen der Axialspannung $\sigma_{xx}$ und der plastischen Dehnung $\varepsilon^p_{xx}$ im am stärksten belasteten Element (Hotspot). Hier wird das lokale Materialverhalten deutlich: Nach Überschreiten der Fließgrenze nimmt die plastische Dehnung zu. Bei der Entlastung bleibt eine bleibende (plastische) Verformung zurück. Das Auftreten einer geschlossenen oder offenen Schleife gibt Aufschluss über das Ratcheting- oder Shakedown-Verhalten des Materials unter zyklischer Last.
+
+\subsubsection{Verfestigungsverhalten}
+In Abbildung \ref{fig:hardening} ist die Von-Mises-Vergleichsspannung $\sigma_{eq}$ über der akkumulierten plastischen Vergleichsdehnung $\varepsilon^p_{eq}$ aufgetragen. Dieser Plot illustriert das implementierte Verfestigungsmodell (kombinierte isotrope und kinematische Verfestigung). Man erkennt, wie mit fortschreitender plastischer Akkumulation die notwendige Fließspannung ansteigt, was der Aufweitung der Fließfläche entspricht.
+
+\subsubsection{Fließfläche im Hauptspannungsraum}
+Abbildung \ref{fig:yield_surface} visualisiert die Lage des aktuellen Spannungszustands im Verhältnis zur Fließbedingung im Raum der Hauptspannungen ($\sigma_1, \sigma_2$). 
+Die rote Kurve markiert die aktuelle Fließfläche unter Berücksichtigung der Verfestigung.
+Der "Center"-Punkt zeigt die Verschiebung des Mittelpunkts durch die kinematische Verfestigung (Backstress).
+Der blaue Pfad ("Stress Path") zeichnet die Historie des Spannungszustands nach. Dass der Endpunkt auf der Berandung der Ellipse liegt, bestätigt, dass sich das Material im plastischen Zustand befindet und die \textit{Return-Mapping}-Algorithmen konsistent arbeiten.

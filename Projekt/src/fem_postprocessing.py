@@ -47,7 +47,7 @@ def plot_spatial_results(fig_title, x_def, conn, element_type, element_results, 
     """
     Plots the final deformed mesh with Displacement and Stress maps.
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 10))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 12))
     fig.suptitle(fig_title, fontweight='bold')
     
     # Vertices for PolyCollection
@@ -64,7 +64,7 @@ def plot_spatial_results(fig_title, x_def, conn, element_type, element_results, 
     ax1.add_collection(pc_u)
     plt.colorbar(pc_u, ax=ax1, label="Verschiebung [mm]")
     ax1.set_title("Verschiebungsbetrag [mm]")
-    ax1.set_aspect('equal')
+    ax1.set_aspect('auto')
     ax1.autoscale_view()
     
     # Stress Plot
@@ -73,7 +73,7 @@ def plot_spatial_results(fig_title, x_def, conn, element_type, element_results, 
     ax2.add_collection(pc_s)
     plt.colorbar(pc_s, ax=ax2, label="Spannung [MPa]")
     ax2.set_title("Von Mises Spannung [MPa]")
-    ax2.set_aspect('equal')
+    ax2.set_aspect('auto')
     ax2.autoscale_view()
     
     if interactive:

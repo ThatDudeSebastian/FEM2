@@ -12,11 +12,6 @@ import os
 from tqdm import tqdm
 from mesh_utils import load_mesh, get_bcs_from_sets
 import time
-try:
-    import fem_postprocessing as fp
-    MODULAR_POST = True
-except ImportError:
-    MODULAR_POST = False
 
 # ============ SETTINGS & CONFIG ===========
 # SI-Einheiten
@@ -36,14 +31,14 @@ E = 205e9 # [Pa]
 nu = 0.29
 
 
-sigma_y = 695e6   # Fließspannung [Pa]
+sigma_y = 350e6    # Fließspannung [Pa]
 H = 2091e6          # Gesamt-Verfestigungsmodul (H_iso + H_kin) [Pa]
 r = 0.35            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
 F_total = -5.3e4     # Normalkraft [N]
-a_hz = 0.0035        # erste Halbachse nach Knothe [m]
-b_hz = 0.0035 # zweite Halbachse nach Knothe [m]
+a_hz = 0.005143        # erste Halbachse nach Knothe [m]
+b_hz = a_hz # zweite Halbachse nach Knothe [m]
 
 p0_hz = (2.0 * F_total) / (math.pi * a_hz * b_hz) # [Pa]
 
@@ -193,7 +188,7 @@ neum = torch.tensor(neum_bcs, dtype=torch.float64).reshape(-1, 3)
 # ============ SETUP VISUALIZATION =========
 # ==========================================
 limit = float(torch.max(torch.abs(x)) * 1.1)
-fig1, ax1 = plt.subplots(figsize=(18, 10))
+fig1, ax1 = plt.subplots(figsize=(8, 8))
 ax1.set_title(f"Simulation Setup\nNodes: {nnp} | Elements: {nel}", fontweight='bold')
 if nen == 8:
     idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
@@ -206,7 +201,12 @@ for bc in neum_bcs:
     if abs(bc[2]) < 1e-6 or bc[1] == 0: continue
     n = int(bc[0]); xn, yn = x_np[n]; vec = -x_np[n]/np.linalg.norm(x_np[n])
     ax1.arrow(xn - 0.1*limit*vec[0], yn - 0.1*limit*vec[1], 0.08*limit*vec[0], 0.08*limit*vec[1], head_width=0.015*limit, head_length=0.02*limit, fc='red', ec='red', zorder=6)
-ax1.set_aspect('equal'); ax1.grid(True, alpha=0.3); plt.show()
+ax1.set_aspect('equal'); ax1.grid(True, alpha=0.3)
+try:
+    fig1.savefig(os.path.join(script_dir, "setup_mesh.png"), dpi=300)
+except Exception as e:
+    print(f"Error saving setup_mesh.png: {e}")
+plt.show()
 
 # ==========================================
 # ============ MATERIAL & SHAPE ============
@@ -281,7 +281,7 @@ def von_mises_return(eps2, state):
     phi = norm_red - math.sqrt(2.0/3.0)*(sigma_y + r*H*k)
     
     if phi <= 0:
-        return s_trial[:2, :2], C4, {"ep": ep, "k": k, "a": a}
+        return s_trial, C4, {"ep": ep, "k": k, "a": a}
     
     # 3. Plastic step (Return Mapping)
     v = s_red_tr / (norm_red + 1e-15)
@@ -309,7 +309,38 @@ def von_mises_return(eps2, state):
     Ct_4th = K*IoxI + c1*Idev_sym + c2*vv
     Ct2 = Ct_4th[:2, :2, :2, :2]
     
-    return sig_n[:2, :2], Ct2, {"ep": ep_n, "k": k_n, "a": a_n}
+    # Return FULL 3D stress tensor to capture sigma_33 correctly for plotting
+    return sig_n, Ct2, {"ep": ep_n, "k": k_n, "a": a_n}
+
+
+
+def yield_curve_sigma12_closed(alpha, beta, n=361):
+    # Effective yield stress (isotropic hardening)
+    sig_eff = float(sigma_y + (r * H) * alpha)
+
+    # Shift (kinematic hardening) in sigma11-sigma22 plane
+    b11 = float(beta[0, 0])
+    b22 = float(beta[1, 1])
+
+    # Quadratic form matrix for tau12=0 von Mises in (s11,s22):
+    # s11^2 - s11*s22 + s22^2 = sig_eff^2
+    # => v^T A v = sig_eff^2, A = [[1, -1/2],[-1/2, 1]]
+    lam1 = 1.5
+    lam2 = 0.5
+    e1 = np.array([1.0, -1.0]) / np.sqrt(2.0)
+    e2 = np.array([1.0,  1.0]) / np.sqrt(2.0)
+
+    thetas = np.linspace(0.0, 2.0*np.pi, n)
+    xs = np.empty(n)
+    ys = np.empty(n)
+
+    for i, th in enumerate(thetas):
+        v = (sig_eff * (np.cos(th) / np.sqrt(lam1) * e1 +
+                        np.sin(th) / np.sqrt(lam2) * e2))
+        xs[i] = v[0] + b11
+        ys[i] = v[1] + b22
+
+    return xs, ys
 
 # ==========================================
 # ============ CORE SOLVER ============
@@ -324,8 +355,14 @@ free_dofs = torch.nonzero(1 - torch.zeros(nnp*ndf, 1).index_fill_(0, (drlt[:, 0]
 disp_pl, load_hist, load_target_hist, fac_used_hist = [], [], [], []
 eps_p_xx_hist, sig_yy_hist, eps_p_eq_hist, sig_eq_hist = [], [], [], []
 k_hist, a_hist, sig_1_hist, sig_2_hist = [], [], [], []
+k_hist, a_hist, sig_1_hist, sig_2_hist = [], [], [], []
 fac_conv, fac_scale, step = 0.0, 1.0, 1
 sim_start_time = time.time()
+
+# --- Tracking Variables ---
+track_el = None
+track_q = None
+best_val = -1.0
 
 # Pre-calculate element DOF indices for speed
 element_dofs = []
@@ -340,7 +377,7 @@ while step <= n_steps:
     pbar.n = step-1; pbar.refresh()
     
     # Calculate target load factor
-    fac_target = (min(1, step/n_ramp_steps) if use_ramp_in else 1) * math.sin(2*math.pi*(step-1)/n_steps_per_cycle)
+    fac_target = (min(1, step/n_ramp_steps) if use_ramp_in else 1) * abs(math.sin(2*math.pi*(step-1)/n_steps_per_cycle))
     print(f"\nSTEP {step}/{n_steps} | Target Load Factor: {fac_target:.4f}")
     
     state_gp_old, u_old, cutbacks = clone_state_gp(state_gp), u.clone(), 0
@@ -357,7 +394,14 @@ while step <= n_steps:
         # Iteration-level storage (only cloned once per substep, NOT per iteration)
         state_gp_current_substep = clone_state_gp(state_gp_old)
         
+        # Temporary storage for tracking potential hotspot in this iter
+        eps_eq_tmp = {}
+        eps_p_xx_tmp, sig_yy_tmp, eps_p_eq_tmp, sig_eq_tmp = {}, {}, {}, {}
+
         for it in range(newton_max):
+            # Reset best_val for this iteration if we are searching (not needed, global is better)
+            # actually we search only in first iter of first loaded step
+            
             Kt, fint = torch.zeros(nnp*ndf, nnp*ndf), torch.zeros(nnp*ndf, 1)
             
             # Temporary state for THIS iteration's trial calculation
@@ -379,14 +423,59 @@ while step <= n_steps:
                     G = torch.linalg.solve(Je.T, Gsh.T).T
                     
                     eps = 0.5 * (ue @ G + (ue @ G).t())
-                    
+                    sim_sig = None
+
                     # Compute stresses and tangent based on the state at the end of the LAST converged substep
+                    # Returns FULL 3x3 stress tensor now
                     sig, Ct, state_gp_current_substep[el][q] = von_mises_return(eps, state_gp_old[el][q])
+                    
+                    # --- TRACKING LOGIC ---
+                    # Calculate values using TRUE 3D stress
+                    s11, s22, s33 = float(sig[0,0]), float(sig[1,1]), float(sig[2,2])
+                    s12 = float(sig[0,1])
+                    
+                    tr_s = s11+s22+s33
+                    s_dev = torch.tensor([[s11-tr_s/3, s12, 0],[s12, s22-tr_s/3, 0],[0,0, s33-tr_s/3]])
+                    svm = math.sqrt(1.5 * torch.sum(s_dev*s_dev).item())
+                    
+                    st_cur = state_gp_current_substep[el][q]
+                    ep_tr = st_cur["ep"]; ep_dev = ep_tr - (torch.trace(ep_tr)/3.0)*torch.eye(3)
+                    ep_eq = math.sqrt((2.0/3.0) * torch.sum(ep_dev*ep_dev).item())
+
+                    key = (el, q)
+                    eps_p_xx_tmp[key] = float(ep_tr[0,0])
+                    sig_yy_tmp[key] = s22
+                    eps_p_eq_tmp[key] = ep_eq
+                    sig_eq_tmp[key] = svm
+                    
+                    # Auto-detect hotspot (first time we have load)
+                    if track_el is None and it == 0 and torch.norm(f_ext[free_dofs]).item() > 1.0:
+                         # [CRITICAL FIX] Avoid Hub Singularity!
+                         # Only consider elements in the outer 20% of the radius (Rim/Tread)
+                         # Calculate approximate radius of this element
+                         # xe is (2, nen) -> mean over nodes
+                         r_el = float(torch.mean(torch.sqrt(xe[0,:]**2 + xe[1,:]**2)))
+                         
+                         # Determine global max radius only once (or estimate)
+                         # We know wheel is roughly centered. xmax is ~0.46m?
+                         # Let's use a safe threshold. If radius is small, skip.
+                         # Better: calculate r_max outside or assuming standard wheel size.
+                         # Let's assume r > 0.2m is safe for a train wheel (usually r=0.46m).
+                         # Or simpler: use `Lx_val` from earlier?
+                         # Let's use a hard threshold for now or logic relative to max coordinate.
+                         r_threshold = 0.2 # meters. Hub is usually < 0.15m.
+                         
+                         if r_el > r_threshold:
+                             if svm > best_val:
+                                best_val = svm
+                                track_el = el 
+                                track_q = q
+                    # ----------------------
                     
                     for A in range(nen):
                         for B in range(nen):
                             Ke[A*2:A*2+2, B*2:B*2+2] += dv * torch.tensordot(G[A], torch.tensordot(Ct, G[B], [[3],[0]]), [[0], [0]])
-                        fe[A*2:A*2+2, 0] += dv * (sig @ G[A].unsqueeze(1)).squeeze()
+                        fe[A*2:A*2+2, 0] += dv * (sig[:2, :2] @ G[A].unsqueeze(1)).squeeze()
                 
                 Kt[edofs.unsqueeze(1), edofs] += Ke
                 fint[edofs] += fe
@@ -400,34 +489,89 @@ while step <= n_steps:
             
             if rel < newton_tol:
                 state_gp, converged = state_gp_current_substep, True
-                # Tracking point stats
-                st_tr = state_gp[i_contact // 4 if element_type == "quad8" else 0][0]
-                eps_p_xx_hist.append(float(st_tr["ep"][0,0]))
-                sig_yy_hist.append(float(sig[1,1]))
+                
+                # Consolidate Tracking Selection
+                if track_el is None and torch.norm(f_ext[free_dofs]).item() > 1.0:
+                    # Fallback if somehow missed
+                    track_el, track_q = 0, 0
+                    print("WARNING: Tracking element not found, defaulting to 0,0")
+                if track_el is not None:
+                     if it==0: print(f"Tracking: El {track_el} QP {track_q} (Max Stress approx {best_val/1e6:.1f} MPa)")
+
+                # Use tracked values
+                if track_el is not None:
+                     k_key = (track_el, track_q)
+                     # Fallback to current values if available (it should be)
+                     if k_key in eps_p_xx_tmp:
+                        eps_p_xx_hist.append(eps_p_xx_tmp[k_key])
+                        sig_yy_hist.append(sig_yy_tmp[k_key] / 1e6) # [MPa]
+                        eps_p_eq_hist.append(eps_p_eq_tmp[k_key])
+                        sig_eq_hist.append(sig_eq_tmp[k_key] / 1e6) # [MPa]
+                        
+                        st_tr = state_gp[track_el][track_q]
+                        k_hist.append(float(st_tr["k"]))
+                        a_hist.append(st_tr["a"].clone())
+                        
+                     else:
+                        # Should not happen if logic is correct
+                        pass
+
                 load_hist.append(float(fac*F_total))
-                disp_pl.append(float(u[i_contact*2+1]))
+                # Tracking Element Displacement (approximate via node 0 of element?)
+                if track_el is not None:
+                    n_tr = conn[track_el][0] # first node
+                    # displacement in mm for plotting? User asked for MPa, usually disp in mm is good too.
+                    # But kept as m in hist for now? Or mm?
+                    # The plot 1 uses meters. Let's keep meters for disp in history to be safe or mm?
+                    # Hannes_main uses disp_pl in [m] for history plot (label says [m]).
+                    disp_pl.append(float(u[int(n_tr)*2+1])) # Y-disp [m]
+                else:
+                    disp_pl.append(0.0)
                 
                 # Enhanced Tracking
                 load_target_hist.append(float(fac_target * F_total))
                 fac_used_hist.append(float(fac))
-                k_hist.append(float(st_tr["k"]))
-                a_hist.append(st_tr["a"].clone())
                 
-                # Correct 3D Stress for Plane Strain
-                s11, s22, s12 = float(sig[0,0]), float(sig[1,1]), float(sig[0,1])
-                s33 = nu * (s11 + s22)
-                tr_s = s11 + s22 + s33
-                s_dev = torch.tensor([[s11-tr_s/3, s12, 0],[s12, s22-tr_s/3, 0],[0, 0, s33-tr_s/3]])
-                sig_eq_hist.append(math.sqrt(1.5 * torch.sum(s_dev*s_dev).item()))
-                
-                ep_tr = st_tr["ep"]
-                ep_dev = ep_tr - (torch.trace(ep_tr)/3.0)*torch.eye(3)
-                eps_p_eq_hist.append(math.sqrt((2.0/3.0) * torch.sum(ep_dev*ep_dev).item()))
-                
-                # Principal stresses (2D) for yield surface path
-                R = math.sqrt(0.25*(s11-s22)**2 + s12**2)
-                sig_1_hist.append((0.5*(s11+s22) + R) / 1e6)
-                sig_2_hist.append((0.5*(s11+s22) - R) / 1e6)
+                # Re-calculate exact stress state of tracked element for Path
+                if track_el is not None:
+                     # Re-compute for tracked QP to get full tensor
+                     st_tr = state_gp[track_el][track_q]
+                     n_idx = conn[track_el]
+                     xe = x[n_idx].t()
+                     edofs = element_dofs[track_el]
+                     ue = u[edofs].reshape(-1, 2).t()
+                     N, Gsh = get_shape_data(qpt[track_q], nen)
+                     Je = xe @ Gsh; G = torch.linalg.solve(Je.T, Gsh.T).T
+                     eps = 0.5 * (ue @ G + (ue @ G).t())
+                     sig_fin, _, _ = von_mises_return(eps, state_gp_old[track_el][track_q]) # Use converged state input
+                     
+                     # Result from `von_mises_return` (sig) is the stress corresponding to `eps` and updated state.
+                     
+                     s11, s22, s33 = float(sig_fin[0,0]), float(sig_fin[1,1]), float(sig_fin[2,2])
+                     s12 = float(sig_fin[0,1])
+                     
+                     # Calculate Principal Stresses for History Path
+                     # (User explicitly requested Principal Space)
+                     # Eigenvalues of 2D block [s11, s12; s12, s22]
+                     curr_center = 0.5 * (s11 + s22)
+                     curr_radius = math.sqrt(0.25*(s11-s22)**2 + s12**2)
+                     
+                     s1 = curr_center + curr_radius
+                     s2 = curr_center - curr_radius
+                     
+                     sig_1_hist.append(s1 / 1e6) # [MPa]
+                     sig_2_hist.append(s2 / 1e6) # [MPa]
+                     
+                     # Store final State rotation for Yield Surface Plot alignment
+                     # Angle of First Principal axis w.r.t Global X
+                     # tan(2theta) = 2*s12 / (s11 - s22)
+                     if abs(s11-s22) > 1e-9:
+                         theta_p = 0.5 * math.atan2(2*s12, s11-s22)
+                     else:
+                         theta_p = 0.0 if abs(s12) < 1e-9 else (math.pi/4 if s12>0 else -math.pi/4)
+                     
+                     final_theta_p = theta_p
+
                 print(f"    -> Converged at iteration {it}")
                 break
                 
@@ -470,7 +614,7 @@ for el in range(nel):
         eps = 0.5*(ue@G + (ue@G).t())
         sig, _, _ = von_mises_return(eps, state_gp[el][q])
         s11, s22, s12 = float(sig[0,0]), float(sig[1,1]), float(sig[0,1])
-        s33 = nu * (s11 + s22)
+        s33 = float(sig[2,2])  # Plane Strain: σ₃₃ kommt aus 3D-Materialmodell, NICHT ν(σ₁₁+σ₂₂)
         tr = (s11 + s22 + s33)/3.0
         sd = torch.tensor([[s11-tr, s12, 0], [s12, s22-tr, 0], [0, 0, s33-tr]])
         svm_el += math.sqrt(1.5 * torch.sum(sd*sd).item())
@@ -512,51 +656,129 @@ if interactive_hover:
     fig.canvas.mpl_connect("motion_notify_event", hover)
 
 # Figure 2: History Analysis
-plt.figure(figsize=(14, 10))
+fig_hist = plt.figure(figsize=(14, 10))
 plt.subplot(2,2,1); plt.plot(disp_pl, load_hist, 'r', label="Actual"); plt.plot(disp_pl, load_target_hist, 'k--', alpha=0.5, label="Target")
-plt.title("Force-Displacement"); plt.xlabel("U_y [m]"); plt.ylabel("Force [N]"); plt.grid(True); plt.legend()
+plt.title("Force-Displacement"); plt.xlabel("U_y [m]"); plt.ylabel("Force [kN]"); plt.grid(True);
+# Subplot 2: Hysteresis Stress-Strain
+plt.subplot(2, 2, 2)
+plt.plot(eps_p_xx_hist, sig_yy_hist, lw=2, color='blue')
+plt.xlabel(r"$\varepsilon^{p}_{xx}$ [-]")
+plt.ylabel(r"$\sigma_{xx}$ [MPa]")
+plt.title("Hysterese: Axialspannung vs. Plast. Dehnung")
+plt.grid(True)
 
-plt.subplot(2,2,2); plt.plot(eps_p_xx_hist, sig_yy_hist, 'b'); plt.title("Hysteresis: sigma_yy vs eps_p_xx")
-plt.xlabel("eps_p_xx [-]"); plt.ylabel("sigma_yy [Pa]"); plt.grid(True)
+# Subplot 3: Equivalent Hysteresis
+plt.subplot(2, 2, 3)
+plt.plot(eps_p_eq_hist, sig_eq_hist, lw=2, color='green')
+plt.xlabel(r"$\varepsilon^p_\mathrm{eq}$ [-]")
+plt.ylabel(r"$\sigma_\mathrm{eq}$ [MPa]")
+plt.title("Äquivalente Sannung vs. Akkumulierte Plast. Dehnung")
+plt.grid(True)
 
-plt.subplot(2,2,3); plt.plot(eps_p_eq_hist, sig_eq_hist, 'g'); plt.title("Equivalent Hysteresis")
-plt.xlabel("eps_p_eq [-]"); plt.ylabel("sigma_eq [Pa]"); plt.grid(True)
 
-plt.subplot(2,2,4)
-if k_hist:
-    k1, a1 = k_hist[-1], a_hist[-1]
-    factor = (2.0/3.0)*(1.0-r)*H; beta1 = factor * a1
-    def get_yield_surf(k, beta):
-        sig_eff = sigma_y + r*H*k; theta = np.linspace(0, 2*np.pi, 200)
-        x = sig_eff*np.cos(theta); y = sig_eff*np.sin(theta)
-        s1 = (x - y/math.sqrt(3)) + (beta[0,0]+beta[1,1]).item()
-        s2 = (x + y/math.sqrt(3)) + (beta[1,1]-beta[0,0]).item()
-        return s1/1e6, s2/1e6
-    x0, y0 = get_yield_surf(0, torch.zeros(3,3)); x1, y1 = get_yield_surf(k1, beta1)
-    plt.plot(x0, y0, 'k--', label="Initial"); plt.plot(x1, y1, 'r', label="Hardened")
-    plt.plot(sig_1_hist, sig_2_hist, 'b', alpha=0.6, label="Path"); plt.scatter(sig_1_hist[-1], sig_2_hist[-1], color='blue')
-    plt.title(f"Yield Surface (r={r})"); plt.xlabel("sigma_1 [MPa]"); plt.ylabel("sigma_2 [MPa]"); plt.grid(True); plt.legend(); plt.axis('equal')
+# Subplot 4: Yield Surface (Principal Stress Space)
+plt.subplot(2, 2, 4)
+plt.title("Fließfläche im HS-Raum (r=0.35)")
 
-plt.tight_layout(); plt.show()
+# Check if final_theta_p exists (it should if tracking ran)
+if 'final_theta_p' not in locals():
+    final_theta_p = 0.0
 
-# --- MODULAR POST-PROCESSING (Redundant / Outsource Test) ---
-if MODULAR_POST:
-    print("\nStarting modular post-processing...")
-    # 1. Spatial Results
-    fp.plot_spatial_results(
-        f"Modular: Displacement & Stress (Step {step-1})",
-        x_def, conn, element_type, element_results, interactive=interactive_hover,
-        save_path="spatial_results_rad.png"
-    )
+if len(a_hist) > 0:
+    a_final = a_hist[-1]
+    # beta tensor (kinematic shift) in Global Frame
+    beta_final = (2.0/3.0)*(1.0-r)*H*a_final
     
-    # 2. History Results
-    fp.plot_history_overview(
-        disp_pl, load_hist, load_target_hist, 
-        eps_p_xx_hist, sig_yy_hist, eps_p_eq_hist, sig_eq_hist, 
-        sig_1_hist, sig_2_hist, k_hist, a_hist, 
-        sigma_y, H, r,
-        save_path="history_results_rad.png"
-    )
-    plt.show()
+    # Rotate beta into Principal Frame
+    # The Principal Axis 1 is at angle `theta_p`.
+    co = math.cos(final_theta_p)
+    si = math.sin(final_theta_p)
+    
+    # Beta components global
+    b11 = float(beta_final[0,0])
+    b22 = float(beta_final[1,1])
+    b12 = float(beta_final[0,1])
+    
+    # Projection to 1-2 Principal Frame (of Stress)
+    # b_p11 = c^2 b11 + 2cs b12 + s^2 b22
+    # b_p22 = s^2 b11 - 2cs b12 + c^2 b22
+    b1_proj = co*co*b11 + 2.0*co*si*b12 + si*si*b22
+    b2_proj = si*si*b11 - 2.0*co*si*b12 + co*co*b22
+    
+    # Isotropic part
+    k_final = k_hist[-1]
+    alpha_iso = k_final
+    
+    # Generate centered ellipse geometry (beta=0)
+    xs0, ys0 = yield_curve_sigma12_closed(alpha_iso, torch.zeros(3,3).double())
+    # Shift manualy by Projected Backstress Center
+    xs_cyc = xs0 + b1_proj
+    ys_cyc = ys0 + b2_proj
+    
+    # Initial Yield (Centered at 0)
+    xs00, ys00 = yield_curve_sigma12_closed(0.0, torch.zeros(3,3).double())
+    plt.plot(xs00/1e6, ys00/1e6, 'k--', label="Initial (Yield)", lw=2.5)
+
+    plt.plot(xs_cyc/1e6, ys_cyc/1e6, 'r-', label="Aktuell (Hardened)", lw=3)
+    
+    # Plot Center (Projected)
+    plt.plot(b1_proj/1e6, b2_proj/1e6, 'rx', markersize=10, markeredgewidth=2, label="Center (Backstress)")
+    
+    # Limit Lines (Relative to Backstress)
+    # s2 = s1 + (b2-b1) +/- 2/sqrt(3)*Y
+    sig_eff_cur = sigma_y + r*H*k_final
+    limit_dist = (2.0/math.sqrt(3.0)) * sig_eff_cur
+    shift = b2_proj - b1_proj
+    
+    sig_range = np.linspace(np.min(xs_cyc/1e6)-1000, np.max(xs_cyc/1e6)+1000, 100)
+    
+    # Line 1 & 2
+    plt.plot(sig_range, sig_range + (shift/1e6) + (limit_dist/1e6), 'r:', alpha=0.6, label="PE Limit")
+    plt.plot(sig_range, sig_range + (shift/1e6) - (limit_dist/1e6), 'r:', alpha=0.6)
+    
+    # Bounds logic
+    x_min_surf = np.min(xs_cyc/1e6); x_max_surf = np.max(xs_cyc/1e6)
+    y_min_surf = np.min(ys_cyc/1e6); y_max_surf = np.max(ys_cyc/1e6)
+    
+    if len(sig_1_hist) > 0:
+        x_min = min(x_min_surf, min(sig_1_hist))
+        x_max = max(x_max_surf, max(sig_1_hist))
+        y_min = min(y_min_surf, min(sig_2_hist))
+        y_max = max(y_max_surf, max(sig_2_hist))
+        margin_x = 0.2*max(x_max-x_min, 100)
+        margin_y = 0.2*max(y_max-y_min, 100)
+        plt.xlim(x_min-margin_x, x_max+margin_x)
+        plt.ylim(y_min-margin_y, y_max+margin_y)
+    else:
+        plt.axis('equal')
+
+    plt.plot(sig_1_hist, sig_2_hist, 'b-', lw=1.5, alpha=0.7, label="Stress Path")
+    if len(sig_1_hist) > 0:
+        plt.plot(sig_1_hist[-1], sig_2_hist[-1], 'co', markersize=6, label="Current State")
+    
+    plt.xlabel(r"$\sigma_{xx}$ [MPa]")
+    plt.ylabel(r"$\sigma_{yy}$ [MPa]")
+    plt.title(f"Fließfläche im HS-Raum (r={r:.2f})")
+    plt.legend()
+    plt.grid(True)
+    plt.axis('equal')
+    
+    # Add Simulation Time Text
+    plt.figtext(0.5, 0.01, f"Simulation Duration: {sim_duration:.2f} s", ha="center", fontsize=9, bbox={"facecolor":"white", "alpha":0.5, "pad":3})
+    
+    # Add origin crosshair
+    plt.axhline(0, color='black', lw=1.0, alpha=0.3)
+    plt.axvline(0, color='black', lw=1.0, alpha=0.3)
+
+else:
+    plt.text(0.5, 0.5, "Keine plastischen Daten", ha='center')
+
+plt.tight_layout()
+try:
+    fig.savefig(os.path.join(script_dir, "spatial_results.png"), dpi=300)
+    fig_hist.savefig(os.path.join(script_dir, "history_results.png"), dpi=300)
+except Exception as e:
+    print(f"Error saving results: {e}")
+plt.show()
 
 print(f"Simulation complete. Duration: {sim_duration:.2f}s")

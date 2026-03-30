@@ -12,6 +12,7 @@ import os
 from tqdm import tqdm
 from mesh_utils import load_mesh, get_bcs_from_sets
 import time
+
 try:
     import fem_postprocessing as fp
     MODULAR_POST = True
@@ -53,13 +54,13 @@ def p_hertz(s):
 
 # --- Cyclic force loading ---
 n_cycles = 1.0
-n_steps_per_cycle = 2
+n_steps_per_cycle = 20
 n_steps = n_cycles * n_steps_per_cycle
 F_amp = F_total
 use_ramp_in = True
 n_ramp_steps = 5
 
-newton_max = 50
+newton_max = 200 # Increased for Modified Newton
 newton_tol = 1e-4
 
 # ==========================================
@@ -193,7 +194,7 @@ neum = torch.tensor(neum_bcs, dtype=torch.float64).reshape(-1, 3)
 # ============ SETUP VISUALIZATION =========
 # ==========================================
 limit = float(torch.max(torch.abs(x)) * 1.1)
-fig1, ax1 = plt.subplots(figsize=(8, 8))
+fig1, ax1 = plt.subplots(figsize=(12, 10))
 ax1.set_title(f"Simulation Setup\nNodes: {nnp} | Elements: {nel}", fontweight='bold')
 if nen == 8:
     idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
@@ -209,32 +210,8 @@ for bc in neum_bcs:
 ax1.set_aspect('equal'); ax1.grid(True, alpha=0.3); plt.show()
 
 # ==========================================
-# ============ MATERIAL & SHAPE ============
+# ============ PRE-CALCULATION & QUADRATURE ============
 # ==========================================
-def get_shape_data(xi, nen):
-    e, n = xi[0], xi[1]
-    N = torch.zeros(nen); G = torch.zeros(nen, 2)
-    if nen == 4:
-        N[0]=0.25*(1-e)*(1-n); N[1]=0.25*(1+e)*(1-n); N[2]=0.25*(1+e)*(1+n); N[3]=0.25*(1-e)*(1+n)
-        G[0,0]=-0.25*(1-n); G[0,1]=-0.25*(1-e); G[1,0]=0.25*(1-n); G[1,1]=-0.25*(1+e)
-        G[2,0]=0.25*(1+n); G[2,1]=0.25*(1+e); G[3,0]=-0.25*(1+n); G[3,1]=0.25*(1-e)
-    elif nen == 8:
-        # 0:BL, 1:BR, 2:TR, 3:TL, 4:B, 5:R, 6:T, 7:L
-        N[0]=0.25*(1-e)*(1-n)*(-e-n-1); N[1]=0.25*(1+e)*(1-n)*(e-n-1)
-        N[2]=0.25*(1+e)*(1+n)*(e+n-1);  N[3]=0.25*(1-e)*(1+n)*(-e+n-1)
-        N[4]=0.5*(1-e*e)*(1-n); N[5]=0.5*(1+e)*(1-n*n); N[6]=0.5*(1-e*e)*(1+n); N[7]=0.5*(1-e)*(1-n*n)
-        G[0,0]=0.25*(1-n)*(-1)*(-e-n-1)+0.25*(1-e)*(1-n)*(-1)
-        G[1,0]=0.25*(1-n)*(1)*(e-n-1)+0.25*(1+e)*(1-n)*(1)
-        G[2,0]=0.25*(1+n)*(1)*(e+n-1)+0.25*(1+e)*(1+n)*(1)
-        G[3,0]=0.25*(1+n)*(-1)*(-e+n-1)+0.25*(1-e)*(1+n)*(-1)
-        G[4,0]=0.5*(-2*e)*(1-n); G[5,0]=0.5*(1-n*n); G[6,0]=0.5*(-2*e)*(1+n); G[7,0]=0.5*(-1)*(1-n*n)
-        G[0,1]=0.25*(1-e)*(-1)*(-e-n-1)+0.25*(1-e)*(1-n)*(-1)
-        G[1,1]=0.25*(1+e)*(-1)*(e-n-1)+0.25*(1+e)*(1-n)*(-1)
-        G[2,1]=0.25*(1+e)*(1)*(e+n-1)+0.25*(1+e)*(1+n)*(1)
-        G[3,1]=0.25*(1-e)*(1)*(-e+n-1)+0.25*(1-e)*(1+n)*(1)
-        G[4,1]=0.5*(1-e*e)*(-1); G[5,1]=0.5*(1+e)*(-2*n); G[6,1]=0.5*(1-e*e)*(1); G[7,1]=0.5*(1-e)*(-2*n)
-    return N, G
-
 if element_type == 'quad8':
     nqp=9; qpt=torch.zeros(9,2); w8=torch.zeros(9); a=math.sqrt(0.6); v=[-a,0,a]; w=[5/9,8/9,5/9]
     for i in range(3):
@@ -242,10 +219,42 @@ if element_type == 'quad8':
 else:
     nqp=4; a=1/math.sqrt(3); qpt=torch.tensor([[-a,-a],[a,-a],[a,a],[-a,a]]); w8=torch.ones(4)
 
-C4 = torch.zeros(2,2,2,2); mu=E/(2*(1+nu)); lam=(E*nu)/((1+nu)*(1-2*nu))
-C4[0,0,0,0]=C4[1,1,1,1]=lam+2*mu; C4[0,0,1,1]=C4[1,1,0,0]=lam; C4[0,1,0,1]=C4[1,0,0,1]=C4[0,1,1,0]=C4[1,0,1,0]=mu
+# Pre-calculate Shape Functions & Gradients for ALL QPs
+# We need N (nqp, nen) and G_iso (nqp, nen, 2)
+N_vec = torch.zeros(nqp, nen, dtype=torch.float64)
+G_iso_vec = torch.zeros(nqp, nen, 2, dtype=torch.float64)
 
-# Pre-calculate 4th-order identity tensors for speed
+for q in range(nqp):
+    xi, eta = qpt[q, 0], qpt[q, 1]
+    if element_type == 'quad8':
+        # Q8 Shape Functions
+        # 0:BL, 1:BR, 2:TR, 3:TL, 4:B, 5:R, 6:T, 7:L
+        N = torch.zeros(nen); G = torch.zeros(nen, 2)
+        N[0]=0.25*(1-xi)*(1-eta)*(-xi-eta-1); N[1]=0.25*(1+xi)*(1-eta)*(xi-eta-1)
+        N[2]=0.25*(1+xi)*(1+eta)*(xi+eta-1);  N[3]=0.25*(1-xi)*(1+eta)*(-xi+eta-1)
+        N[4]=0.5*(1-xi*xi)*(1-eta); N[5]=0.5*(1+xi)*(1-eta*eta); N[6]=0.5*(1-xi*xi)*(1+eta); N[7]=0.5*(1-xi)*(1-eta*eta)
+        
+        G[0,0]=0.25*(1-eta)*(-1)*(-xi-eta-1)+0.25*(1-xi)*(1-eta)*(-1)
+        G[1,0]=0.25*(1-eta)*(1)*(xi-eta-1)+0.25*(1+xi)*(1-eta)*(1)
+        G[2,0]=0.25*(1+eta)*(1)*(xi+eta-1)+0.25*(1+xi)*(1+eta)*(1)
+        G[3,0]=0.25*(1+eta)*(-1)*(-xi+eta-1)+0.25*(1-xi)*(1+eta)*(-1)
+        G[4,0]=0.5*(-2*xi)*(1-eta); G[5,0]=0.5*(1-eta*eta); G[6,0]=0.5*(-2*xi)*(1+eta); G[7,0]=0.5*(-1)*(1-eta*eta)
+        
+        G[0,1]=0.25*(1-xi)*(-1)*(-xi-eta-1)+0.25*(1-xi)*(1-eta)*(-1)
+        G[1,1]=0.25*(1+xi)*(-1)*(xi-eta-1)+0.25*(1+xi)*(1-eta)*(-1)
+        G[2,1]=0.25*(1+xi)*(1)*(xi+eta-1)+0.25*(1+xi)*(1+eta)*(1)
+        G[3,1]=0.25*(1-xi)*(1)*(-xi+eta-1)+0.25*(1-xi)*(1+eta)*(1)
+        G[4,1]=0.5*(1-xi*xi)*(-1); G[5,1]=0.5*(1+xi)*(-2*eta); G[6,1]=0.5*(1-xi*xi)*(1); G[7,1]=0.5*(1-xi)*(-2*eta)
+    else:
+        # Q4
+        N[0]=0.25*(1-xi)*(1-eta); N[1]=0.25*(1+xi)*(1-eta); N[2]=0.25*(1+xi)*(1+eta); N[3]=0.25*(1-xi)*(1+eta)
+        G[0,0]=-0.25*(1-eta); G[0,1]=-0.25*(1-xi); G[1,0]=0.25*(1-eta); G[1,1]=-0.25*(1+xi)
+        G[2,0]=0.25*(1+eta); G[2,1]=0.25*(1+xi); G[3,0]=-0.25*(1+eta); G[3,1]=0.25*(1-xi)
+    
+    N_vec[q] = N
+    G_iso_vec[q] = G
+
+# Identity Tensors (Global)
 I3 = torch.eye(3, dtype=torch.float64)
 I4s = torch.zeros(3,3,3,3, dtype=torch.float64)
 for i in range(3):
@@ -255,69 +264,166 @@ for i in range(3):
                 I4s[i,j,k2,l2] = 0.5*((1.0 if (i==k2 and j==l2) else 0.0) + (1.0 if (i==l2 and j==k2) else 0.0))
 IoxI = torch.einsum("ij,kl->ijkl", I3, I3)
 Idev_sym = I4s - (1.0/3.0)*IoxI
+Idev_sym_2d = Idev_sym[:2,:2,:2,:2].contiguous() # For 2D parts
+IoxI_2d = IoxI[:2,:2,:2,:2].contiguous() # For 2D parts
 
-def von_mises_return(eps2, state):
-    mu = E / (2.0 * (1.0 + nu))
-    K = E / (3.0 * (1.0 - 2.0 * nu))
-    I3 = torch.eye(3, dtype=torch.float64)
-    
-    eps = torch.zeros(3, 3, dtype=torch.float64)
-    eps[:2, :2] = eps2
-    
-    ep = state["ep"] 
-    k = float(state["k"])
-    a = state["a"] 
-    
-    # 1. Trial state
-    # s = 2*mu*(eps_dev - ep) + K*trace(eps)*I
-    s_trial = 2.0*mu*(eps - ep - (torch.trace(eps - ep)/3.0)*I3) + K*torch.trace(eps)*I3
-    
-    # 2. Yield surface check
-    s_dev_tr = s_trial - (torch.trace(s_trial)/3.0)*I3
-    alpha_h_tr = -(2.0/3.0)*(1.0-r)*H*a
-    s_red_tr = s_dev_tr + alpha_h_tr
-    norm_red = torch.norm(s_red_tr)
-    
-    phi = norm_red - math.sqrt(2.0/3.0)*(sigma_y + r*H*k)
-    
-    if phi <= 0:
-        return s_trial[:2, :2], C4, {"ep": ep, "k": k, "a": a}
-    
-    # 3. Plastic step (Return Mapping)
-    v = s_red_tr / (norm_red + 1e-15)
-    B = 2.0*mu + (2.0/3.0)*H
-    dlam = phi / B
-    
-    # Update internal vars
-    ep_n = ep + dlam * v
-    k_n = k + dlam * math.sqrt(2.0/3.0)
-    a_n = a + dlam * v
-    
-    # Ensure deviatoric
-    ep_n = ep_n - (torch.trace(ep_n)/3.0)*I3
-    a_n = a_n - (torch.trace(a_n)/3.0)*I3
-    
-    # Stress update
-    sig_n = s_trial - 2.0*mu*dlam*v
-    
-    # 4. Consistent Tangent
-    A_fac = 2.0*mu
-    c1 = 2.0*mu * (1.0 - (A_fac * dlam / (norm_red + 1e-15)))
-    c2 = 2.0*mu * A_fac * (dlam / (norm_red + 1e-15) - 1.0/B)
-    
-    vv = torch.einsum("ij,kl->ijkl", v, v)
-    Ct_4th = K*IoxI + c1*Idev_sym + c2*vv
-    Ct2 = Ct_4th[:2, :2, :2, :2]
-    
-    return sig_n[:2, :2], Ct2, {"ep": ep_n, "k": k_n, "a": a_n}
+# Elastic Tangent (Plane Strain)
+C4 = torch.zeros(2,2,2,2, dtype=torch.float64)
+mu = E / (2.0*(1.0+nu)); K_mod = E / (3.0*(1.0-2.0*nu)) # K is taken by Loop index
+lam = (E*nu)/((1+nu)*(1-2*nu))
+C4[0,0,0,0]=C4[1,1,1,1]=lam+2*mu; C4[0,0,1,1]=C4[1,1,0,0]=lam; C4[0,1,0,1]=C4[1,0,0,1]=C4[0,1,1,0]=C4[1,0,1,0]=mu
+C4_flat = C4.reshape(4,4) # For matrix mult if needed
+
+# Gather Indices for Batched Assembly
+print("Preparing Gather Indices...")
+gather_indices = torch.zeros(nel, nen*ndf, dtype=torch.long)
+for e in range(nel):
+    indices = []
+    for n in conn[e]:
+        indices.extend([int(n)*ndf, int(n)*ndf+1])
+    gather_indices[e] = torch.tensor(indices, dtype=torch.long)
 
 # ==========================================
-# ============ CORE SOLVER ============
+# ============ VECTORIZED J2 ============
 # ==========================================
-def clone_state_gp(state_gp):
-    return [[{k: v.clone() if torch.is_tensor(v) else v for k, v in qp.items()} for qp in el] for el in state_gp]
+def von_mises_return_batch(eps2_batch, ep_batch, k_batch, a_batch):
+    # Input shapes: 
+    # eps2_batch: (nel, nqp, 2, 2)
+    # ep_batch (alpha): (nel, nqp, 3, 3)
+    # k_batch: (nel, nqp)
+    # a_batch (backstress): (nel, nqp, 3, 3)
+    
+    # Constants and Dimensions
+    batch_size, n_qp, _, _ = eps2_batch.shape
+    
+    # Construct 3D Strain (Plane Strain: eps33 = 0)
+    eps = torch.zeros(batch_size, n_qp, 3, 3, dtype=torch.float64)
+    eps[:, :, :2, :2] = eps2_batch
+    
+    # 1. Trial State
+    # s_trial = 2*mu*(eps - ep) + K*tr(eps)*I
+    trace_eps = (eps[:, :, 0, 0] + eps[:, :, 1, 1]).unsqueeze(-1).unsqueeze(-1) # (nel, nqp, 1, 1)
+    
+    # Deviatoric trial stress
+    s_trial = 2.0 * mu * (eps - ep_batch) + lam * trace_eps * I3 
 
-state_gp = [[{"ep":torch.zeros(3,3), "k": 0.0, "a": torch.zeros(3,3)} for q in range(nqp)] for e in range(nel)]
+    # Deviatoric part of s_trial
+    trace_s = (s_trial[:, :, 0, 0] + s_trial[:, :, 1, 1] + s_trial[:, :, 2, 2]) / 3.0
+    s_dev = s_trial - trace_s.unsqueeze(-1).unsqueeze(-1) * I3
+    
+    # Backstress: alpha_h = (2/3) * (1-r) * H * a
+    alpha_h = (2.0/3.0) * (1.0 - r) * H * a_batch
+    
+    s_red = s_dev - alpha_h # Relative stress
+    
+    # Norm of relative stress
+    norm_red = torch.norm(s_red, dim=(2,3)) # (nel, nqp)
+    
+    # Yield function
+    # phi = ||s_rel|| - sqrt(2/3) * (sy + r*H*k)
+    f_yield = norm_red - math.sqrt(2.0/3.0) * (sigma_y + r * H * k_batch)
+    
+    # --- MASKING ---
+    # Where f_yield > 0: PLASTIC
+    mask = f_yield > 0 # (nel, nqp) boolean
+    
+    # Initialize returns with ELASTIC values
+    sig_out = s_trial.clone()
+    Ct_out = torch.zeros(batch_size, n_qp, 2, 2, 2, 2, dtype=torch.float64)
+    # Expand C4 to batch size
+    Ct_out[:] = C4 # Default to elastic tangent
+    
+    ep_new = ep_batch.clone()
+    k_new = k_batch.clone()
+    a_new = a_batch.clone()
+    
+    # --- PLASTIC CORRECTION (Only for masked) ---
+    if torch.any(mask):
+        # Extract active values
+        norm_red_act = norm_red[mask]
+        phi_act = f_yield[mask]
+        
+        # Directions
+        # v = s_red / norm_red
+        v = s_red[mask] / norm_red_act.unsqueeze(-1).unsqueeze(-1) # (N_act, 3, 3)
+        
+        # Plastic Multiplier
+        B = 2.0*mu + (2.0/3.0)*H
+        dlam = phi_act / B
+        
+        # Update Internal Vars
+        # ep_n = ep + dlam * v
+        d_ep = dlam.unsqueeze(-1).unsqueeze(-1) * v
+        ep_new[mask] += d_ep
+        k_new[mask] += dlam * math.sqrt(2.0/3.0)
+        a_new[mask] += d_ep # Kinematic var evolution
+        
+        # Update Stress
+        # sig = s_trial - 2*mu*dlam*v
+        sig_out[mask] -= 2.0 * mu * d_ep
+        
+        # Consistent Tangent
+        # Modified Newton: Keep Elastic Ct_out!
+        # Consistent Tangent logic is commented out below to prevent numerical instability
+        """
+        A_fac = 2.0 * mu
+        ratio = dlam / (norm_red_act + 1e-20)
+        c1 = 2.0 * mu * (1.0 - A_fac * ratio)
+        c2 = 2.0 * mu * A_fac * (ratio - 1.0/B)
+        
+        vv = torch.einsum("nij,nkl->nijkl", v, v)
+        c1_exp = c1.view(-1, 1, 1, 1, 1)
+        c2_exp = c2.view(-1, 1, 1, 1, 1)
+        
+        Ct_plast = (K_mod * IoxI.unsqueeze(0) + 
+                    c1_exp * Idev_sym.unsqueeze(0) +
+                    c2_exp * vv)
+        Ct_out[mask] = Ct_plast[:, :2, :2, :2, :2]
+        """
+        
+    return sig_out[:, :, :2, :2], Ct_out, ep_new, k_new, a_new
+
+# ==========================================
+# ============ GEO PRE-CALCULATION (Small Strain) ============
+# ==========================================
+print("Pre-calculating geometric tensors (G, dv)...")
+
+# Gather Element Coords
+xe = x[conn].transpose(1, 2) # (nel, 2, nen)
+
+# Jacobian: Je = xe @ G_iso
+Je_batch = torch.einsum("eak,qkb->eaqb", xe, G_iso_vec) # (nel, 2, nqp, 2)
+Je_batch = Je_batch.permute(0, 2, 1, 3) # (nel, nqp, 2, 2)
+
+# Determinant
+det_Je = torch.det(Je_batch) # (nel, nqp)
+
+# Inverse Jacobian
+Je_inv = torch.linalg.inv(Je_batch) # (nel, nqp, 2, 2)
+
+# Global Gradient G = inv(Je) @ G_iso
+G_global = torch.einsum("qnj,eqji->eqni", G_iso_vec, Je_inv)
+
+# dv = det * w * thickness
+dv_global = det_Je * w8.unsqueeze(0) * b_hz # (nel, nqp)
+
+# Clean up memory
+del xe, Je_batch, det_Je, Je_inv
+import gc; gc.collect()
+
+print(f"DEBUG info:")
+print(f"  Fixed Nodes: {len(fixed_nodes)}")
+print(f"  Loaded Nodes: {len(loaded_nodes)}")
+print(f"  Min det(Je): {dv_global.min().item()/b_hz:.4e} (Should be > 0)")
+print(f"  Max det(Je): {dv_global.max().item()/b_hz:.4e}")
+
+# ==========================================
+# ============ CORE SOLVER (VECTORIZED) ============
+# ==========================================
+# State Initialization (Tensors)
+ep_state = torch.zeros(nel, nqp, 3, 3, dtype=torch.float64)
+k_state = torch.zeros(nel, nqp, dtype=torch.float64)
+a_state = torch.zeros(nel, nqp, 3, 3, dtype=torch.float64)
 u = torch.zeros(nnp*ndf, 1)
 free_dofs = torch.nonzero(1 - torch.zeros(nnp*ndf, 1).index_fill_(0, (drlt[:, 0]*2 + drlt[:, 1]).long(), 1))[:, 0]
 
@@ -327,71 +433,74 @@ k_hist, a_hist, sig_1_hist, sig_2_hist = [], [], [], []
 fac_conv, fac_scale, step = 0.0, 1.0, 1
 sim_start_time = time.time()
 
-# Pre-calculate element DOF indices for speed
-element_dofs = []
-for el in range(nel):
-    indices = []
-    for n in conn[el]:
-        indices.extend([int(n)*ndf, int(n)*ndf+1])
-    element_dofs.append(torch.tensor(indices, dtype=torch.long))
+# Pre-calculate gather indices flat for scattering
+rows_flat = gather_indices.unsqueeze(2).expand(nel, nen*ndf, nen*ndf).flatten()
+cols_flat = gather_indices.unsqueeze(1).expand(nel, nen*ndf, nen*ndf).flatten()
 
+print("Starting Vectorized Solver...")
 pbar = tqdm(total=int(n_steps), desc="Solving")
+
 while step <= n_steps:
     pbar.n = step-1; pbar.refresh()
     
     # Calculate target load factor
     fac_target = (min(1, step/n_ramp_steps) if use_ramp_in else 1) * math.sin(2*math.pi*(step-1)/n_steps_per_cycle)
-    print(f"\nSTEP {step}/{n_steps} | Target Load Factor: {fac_target:.4f}")
     
-    state_gp_old, u_old, cutbacks = clone_state_gp(state_gp), u.clone(), 0
+    # Save State (Backup for Cutback)
+    ep_old = ep_state.clone()
+    k_old = k_state.clone()
+    a_old = a_state.clone() 
+    u_old = u.clone()
+    cutbacks = 0
     
     while True:
         fac = fac_conv + fac_scale * (fac_target - fac_conv)
         print(f"  Substep: fac_conv={fac_conv:.4f} -> fac={fac:.4f} (scale={fac_scale:.3e})")
         
-        f_ext = torch.zeros(nnp*ndf, 1)
-        for bc in neum: f_ext[int(bc[0])*2 + int(bc[1])] = fac * bc[2]
+        # External Force Vector
+        f_ext = torch.zeros(nnp*ndf, 1, dtype=torch.float64)
+        if len(neum) > 0:
+            # Vectorized BC application
+            indices = (neum[:, 0]*2 + neum[:, 1]).long()
+            values = neum[:, 2] * fac
+            f_ext.index_add_(0, indices, values.unsqueeze(1))
         
-        u, converged = u_old.clone(), False
+        u = u_old.clone()
+        converged = False
         
-        # Iteration-level storage (only cloned once per substep, NOT per iteration)
-        state_gp_current_substep = clone_state_gp(state_gp_old)
+        # Substep State (Updated ITERATIVELY inside Newton)
         
         for it in range(newton_max):
-            Kt, fint = torch.zeros(nnp*ndf, nnp*ndf), torch.zeros(nnp*ndf, 1)
+            # 1. Gather Displacements
+            ue_flat = u.squeeze()[gather_indices] # (nel, nen*ndf)
+            ue = ue_flat.reshape(nel, nen, 2) # (nel, nen, 2)
             
-            # Temporary state for THIS iteration's trial calculation
-            # We don't actually need to deep-clone EVERYTHING every time if we're careful,
-            # but for J2 we need the trial state based on the converged state of the PREVIOUS substep.
+            # 2. Compute Strain
+            grad_u = torch.einsum("end,eqni->eqdi", ue, G_global)
+            eps = 0.5 * (grad_u + grad_u.transpose(-1, -2)) # (nel, nqp, 2, 2)
             
-            for el in range(nel):
-                n_idx = conn[el]
-                xe = x[n_idx].t()
-                edofs = element_dofs[el]
-                ue = u[edofs].reshape(-1, 2).t()
-                
-                Ke, fe = torch.zeros(nen*ndf, nen*ndf), torch.zeros(nen*ndf, 1)
-                
-                for q in range(nqp):
-                    N, Gsh = get_shape_data(qpt[q], nen)
-                    Je = xe @ Gsh
-                    dv = torch.det(Je) * w8[q] * b_hz
-                    G = torch.linalg.solve(Je.T, Gsh.T).T
-                    
-                    eps = 0.5 * (ue @ G + (ue @ G).t())
-                    
-                    # Compute stresses and tangent based on the state at the end of the LAST converged substep
-                    sig, Ct, state_gp_current_substep[el][q] = von_mises_return(eps, state_gp_old[el][q])
-                    
-                    for A in range(nen):
-                        for B in range(nen):
-                            Ke[A*2:A*2+2, B*2:B*2+2] += dv * torch.tensordot(G[A], torch.tensordot(Ct, G[B], [[3],[0]]), [[0], [0]])
-                        fe[A*2:A*2+2, 0] += dv * (sig @ G[A].unsqueeze(1)).squeeze()
-                
-                Kt[edofs.unsqueeze(1), edofs] += Ke
-                fint[edofs] += fe
+            # 3. Material Law (Batched)
+            # Use state from OLD converged step as base for trial
+            sig, Ct, ep_new, k_new, a_new = von_mises_return_batch(eps, ep_old, k_old, a_old)
             
-            R = f_ext - fint
+            # 4. Integrate Internal Force
+            fe = torch.einsum("eqij,eqnj,eq->eni", sig, G_global, dv_global)
+            fe_flat = fe.reshape(nel, nen*ndf)
+            
+            # 5. Integrate Stiffness Matrix
+            Ke_tensor = torch.einsum("eqak,eqikjl,eqbl,eq->eaibj", G_global, Ct, G_global, dv_global)
+            Ke_flat = Ke_tensor.reshape(nel, nen*ndf, nen*ndf)
+            
+            # 6. Global Assembly
+            Kt = torch.zeros(nnp*ndf, nnp*ndf, dtype=torch.float64)
+            f_int = torch.zeros(nnp*ndf, 1, dtype=torch.float64)
+            
+            # Index Put (Scatter Add)
+            Kt.index_put_((rows_flat, cols_flat), Ke_flat.flatten(), accumulate=True)
+            f_int.view(-1).index_put_((gather_indices.flatten(),), fe_flat.flatten(), accumulate=True)
+            
+            # 7. Solve
+            R = f_ext - f_int
             Rf = R[free_dofs]
             fext_norm = torch.norm(f_ext[free_dofs])
             rel = float(torch.norm(Rf)) / max(float(fext_norm), 1.0)
@@ -399,54 +508,78 @@ while step <= n_steps:
             print(f"    it {it:2d}: rel={rel:.3e}, ||Rf||={torch.norm(Rf):.3e}")
             
             if rel < newton_tol:
-                state_gp, converged = state_gp_current_substep, True
-                # Tracking point stats
-                st_tr = state_gp[i_contact // 4 if element_type == "quad8" else 0][0]
-                eps_p_xx_hist.append(float(st_tr["ep"][0,0]))
-                sig_yy_hist.append(float(sig[1,1]))
+                # Update State Tensors
+                ep_state = ep_new
+                k_state = k_new
+                a_state = a_new
+                
+                # --- HISTORIE TRACKING ---
+                el_containing = torch.where(conn == i_contact)
+                if len(el_containing[0]) > 0:
+                    el_idx = el_containing[0][0].item()
+                else:
+                    el_idx = 0
+                
+                # History Append
+                # Stress at el_idx, qp=0
+                sig_val = sig[el_idx, 0]
+                ep_val_xx = ep_new[el_idx, 0, 0, 0]
+                
+                eps_p_xx_hist.append(float(ep_val_xx))
+                sig_yy_hist.append(float(sig_val[1,1]))
                 load_hist.append(float(fac*F_total))
                 disp_pl.append(float(u[i_contact*2+1]))
                 
-                # Enhanced Tracking
                 load_target_hist.append(float(fac_target * F_total))
                 fac_used_hist.append(float(fac))
-                k_hist.append(float(st_tr["k"]))
-                a_hist.append(st_tr["a"].clone())
+                k_hist.append(float(k_new[el_idx, 0]))
+                a_hist.append(a_new[el_idx, 0])
                 
-                # Correct 3D Stress for Plane Strain
-                s11, s22, s12 = float(sig[0,0]), float(sig[1,1]), float(sig[0,1])
-                s33 = nu * (s11 + s22)
-                tr_s = s11 + s22 + s33
-                s_dev = torch.tensor([[s11-tr_s/3, s12, 0],[s12, s22-tr_s/3, 0],[0, 0, s33-tr_s/3]])
-                sig_eq_hist.append(math.sqrt(1.5 * torch.sum(s_dev*s_dev).item()))
+                # Eq Stress
+                s11, s22, s12 = float(sig_val[0,0]), float(sig_val[1,1]), float(sig_val[0,1])
+                s33 = nu*(s11+s22)
+                tr = (s11+s22+s33)/3.0
+                svm = math.sqrt(1.5*((s11-tr)**2 + (s22-tr)**2 + (s33-tr)**2 + 2*s12**2))
+                sig_eq_hist.append(svm)
                 
-                ep_tr = st_tr["ep"]
-                ep_dev = ep_tr - (torch.trace(ep_tr)/3.0)*torch.eye(3)
-                eps_p_eq_hist.append(math.sqrt((2.0/3.0) * torch.sum(ep_dev*ep_dev).item()))
+                # Eq Plastic Strain
+                ep_tr = ep_new[el_idx, 0]
+                ep_dev = ep_tr - (torch.trace(ep_tr)/3)*torch.eye(3)
+                ep_eq = math.sqrt((2/3)*torch.sum(ep_dev**2).item())
+                eps_p_eq_hist.append(ep_eq)
                 
-                # Principal stresses (2D) for yield surface path
-                R = math.sqrt(0.25*(s11-s22)**2 + s12**2)
-                sig_1_hist.append((0.5*(s11+s22) + R) / 1e6)
-                sig_2_hist.append((0.5*(s11+s22) - R) / 1e6)
+                # Principal
+                R_sig = math.sqrt(0.25*(s11-s22)**2 + s12**2)
+                sig_1_hist.append((0.5*(s11+s22)+R_sig)/1e6)
+                sig_2_hist.append((0.5*(s11+s22)-R_sig)/1e6)
+                
+                converged = True
                 print(f"    -> Converged at iteration {it}")
                 break
-                
-            du_f = torch.linalg.solve(Kt[free_dofs][:, free_dofs], Rf)
-            u[free_dofs] += du_f
             
+            # Solve Linear System
+            # Invert Kt or Solve
+            try:
+                du = torch.zeros_like(u)
+                du[free_dofs] = torch.linalg.solve(Kt[free_dofs][:, free_dofs], Rf)
+                u += du
+            except Exception as e:
+                print(f"    !! Solver Error: {e}")
+                converged = False
+                break
+                
         if converged:
             fac_conv = fac
-            state_gp_old, u_old = clone_state_gp(state_gp), u.clone()
             if abs(fac_target - fac_conv) < 1e-3:
                 step += 1
                 break
-            fac_scale = min(1.0, fac_scale * 1.5)
+            fac_scale = min(1.0, fac_scale * 1.1)
         else:
-            print(f"  !! Cutback: substep failed to converge. Reducing factor scale.")
+            print(f"  !! Cutback: substep failed to converge. Reducing scale.")
             fac_scale *= 0.5
             cutbacks += 1
-            if fac_scale < 1e-4 or cutbacks > 8:
-                raise RuntimeError(f"Step {step} failed to converge after {cutbacks} cutbacks.")
+            if fac_scale < 1e-6 or cutbacks > 15:
+                raise RuntimeError(f"Convergence failed at step {step} (Scale: {fac_scale:.2e})")
 
 pbar.close()
 sim_duration = time.time() - sim_start_time
@@ -459,104 +592,69 @@ element_results = {"u_norm": np.zeros(nel), "svm": np.zeros(nel)}
 u_np = u.detach().numpy().flatten()
 x_def = x_np + u_np.reshape(-1, 2)
 
-for el in range(nel):
-    indices = element_dofs[el]
-    ue = u[indices].reshape(-1, 2).t()
-    xe = x[conn[el]].t()
-    svm_el, u_norm_el = 0.0, 0.0
-    for q in range(nqp):
-        N, Gsh = get_shape_data(qpt[q], nen)
-        Je = xe @ Gsh; G = torch.linalg.solve(Je.T, Gsh.T).T
-        eps = 0.5*(ue@G + (ue@G).t())
-        sig, _, _ = von_mises_return(eps, state_gp[el][q])
-        s11, s22, s12 = float(sig[0,0]), float(sig[1,1]), float(sig[0,1])
-        s33 = nu * (s11 + s22)
-        tr = (s11 + s22 + s33)/3.0
-        sd = torch.tensor([[s11-tr, s12, 0], [s12, s22-tr, 0], [0, 0, s33-tr]])
-        svm_el += math.sqrt(1.5 * torch.sum(sd*sd).item())
-        u_vals = (ue @ N).detach().numpy()
-        u_norm_el += np.linalg.norm(u_vals)
-    element_results["svm"][el] = svm_el / nqp / 1e6 # MPa
-    element_results["u_norm"][el] = (u_norm_el / nqp) * 1000 # mm
+# Vectorized Post-Processing
+# 1. Displacements
+ue_flat = u.squeeze()[gather_indices] # (nel, nen*ndf)
+ue = ue_flat.reshape(nel, nen, 2)
+u_qp = torch.einsum("end,qn->eqd", ue, N_vec)
+u_norm_qp = torch.norm(u_qp, dim=2) # (nel, nqp)
+element_results["u_norm"] = torch.mean(u_norm_qp, dim=1).detach().numpy() * 1000.0 # mm
 
-# Figure 1: Spatial Results
-fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(15, 7))
-fig.suptitle(f"Final State: Displacement & Von Mises Stress (Step {step-1})", fontweight='bold')
+# 2. Stresses
+# Compute final strains
+grad_u = torch.einsum("end,eqni->eqdi", ue, G_global)
+eps = 0.5 * (grad_u + grad_u.transpose(-1, -2))
 
-verts = [x_def[conn[e][idx if element_type=="quad8" else [0,1,2,3,0]]] for e in range(nel)]
-pc_u = PolyCollection(verts, cmap='viridis', edgecolors='none', alpha=0.9)
-pc_u.set_array(element_results["u_norm"])
-ax2.add_collection(pc_u); plt.colorbar(pc_u, ax=ax2, label="Verschiebung [mm]")
-ax2.set_title("Verschiebungsbetrag"); ax2.set_aspect('equal'); ax2.autoscale_view()
+# Compute final stresses using final state
+# ep_state, k_state, a_state are already updated to the END of the simulation
+sig_final, _, _, _, _ = von_mises_return_batch(eps, ep_state, k_state, a_state)
 
-pc_s = PolyCollection(verts, cmap='jet', edgecolors='none', alpha=0.9)
-pc_s.set_array(element_results["svm"])
-ax3.add_collection(pc_s); plt.colorbar(pc_s, ax=ax3, label="Spannung [MPa]")
-ax3.set_title("Von Mises Spannung"); ax3.set_aspect('equal'); ax3.autoscale_view()
+# Von Mises
+# sig_final: (nel, nqp, 2, 2)
+s11 = sig_final[:, :, 0, 0]
+s22 = sig_final[:, :, 1, 1]
+s12 = sig_final[:, :, 0, 1]
+s33 = nu * (s11 + s22)
+tr = (s11 + s22 + s33) / 3.0
 
-if interactive_hover:
-    ann2 = ax2.annotate("", xy=(0,0), xytext=(20, 20), textcoords="offset points", bbox=dict(boxstyle="round", fc="w", alpha=0.8), arrowprops=dict(arrowstyle="->"))
-    ann3 = ax3.annotate("", xy=(0,0), xytext=(20, 20), textcoords="offset points", bbox=dict(boxstyle="round", fc="w", alpha=0.8), arrowprops=dict(arrowstyle="->"))
-    ann2.set_visible(False); ann3.set_visible(False)
-    def hover(event):
-        for ax, ann, pc, key, unit in [(ax2, ann2, pc_u, "u_norm", "mm"), (ax3, ann3, pc_s, "svm", "MPa")]:
-            if event.inaxes == ax:
-                cont, ind = pc.contains(event)
-                if cont:
-                    i = ind["ind"][0]; b = pc.get_paths()[i].get_extents()
-                    ann.xy = [(b.x0+b.x1)/2, (b.y0+b.y1)/2]
-                    ann.set_text(f"Elem: {i}\n{element_results[key][i]:.2f} {unit}")
-                    ann.set_visible(True); fig.canvas.draw_idle(); return
-            ann.set_visible(False)
-        fig.canvas.draw_idle()
-    fig.canvas.mpl_connect("motion_notify_event", hover)
+sd11, sd22, sd33 = s11-tr, s22-tr, s33-tr
+sd12 = s12
+svm_sq = 1.5 * (sd11**2 + sd22**2 + sd33**2 + 2*sd12**2)
+svm = torch.sqrt(svm_sq) # (nel, nqp)
 
-# Figure 2: History Analysis
-plt.figure(figsize=(14, 10))
-plt.subplot(2,2,1); plt.plot(disp_pl, load_hist, 'r', label="Actual"); plt.plot(disp_pl, load_target_hist, 'k--', alpha=0.5, label="Target")
-plt.title("Force-Displacement"); plt.xlabel("U_y [m]"); plt.ylabel("Force [N]"); plt.grid(True); plt.legend()
+element_results["svm"] = torch.mean(svm, dim=1).detach().numpy() / 1e6 # MPa
 
-plt.subplot(2,2,2); plt.plot(eps_p_xx_hist, sig_yy_hist, 'b'); plt.title("Hysteresis: sigma_yy vs eps_p_xx")
-plt.xlabel("eps_p_xx [-]"); plt.ylabel("sigma_yy [Pa]"); plt.grid(True)
-
-plt.subplot(2,2,3); plt.plot(eps_p_eq_hist, sig_eq_hist, 'g'); plt.title("Equivalent Hysteresis")
-plt.xlabel("eps_p_eq [-]"); plt.ylabel("sigma_eq [Pa]"); plt.grid(True)
-
-plt.subplot(2,2,4)
-if k_hist:
-    k1, a1 = k_hist[-1], a_hist[-1]
-    factor = (2.0/3.0)*(1.0-r)*H; beta1 = factor * a1
-    def get_yield_surf(k, beta):
-        sig_eff = sigma_y + r*H*k; theta = np.linspace(0, 2*np.pi, 200)
-        x = sig_eff*np.cos(theta); y = sig_eff*np.sin(theta)
-        s1 = (x - y/math.sqrt(3)) + (beta[0,0]+beta[1,1]).item()
-        s2 = (x + y/math.sqrt(3)) + (beta[1,1]-beta[0,0]).item()
-        return s1/1e6, s2/1e6
-    x0, y0 = get_yield_surf(0, torch.zeros(3,3)); x1, y1 = get_yield_surf(k1, beta1)
-    plt.plot(x0, y0, 'k--', label="Initial"); plt.plot(x1, y1, 'r', label="Hardened")
-    plt.plot(sig_1_hist, sig_2_hist, 'b', alpha=0.6, label="Path"); plt.scatter(sig_1_hist[-1], sig_2_hist[-1], color='blue')
-    plt.title(f"Yield Surface (r={r})"); plt.xlabel("sigma_1 [MPa]"); plt.ylabel("sigma_2 [MPa]"); plt.grid(True); plt.legend(); plt.axis('equal')
-
-plt.tight_layout(); plt.show()
-
-# --- MODULAR POST-PROCESSING (Redundant / Outsource Test) ---
-if MODULAR_POST:
-    print("\nStarting modular post-processing...")
-    # 1. Spatial Results
-    fp.plot_spatial_results(
-        f"Modular: Displacement & Stress (Step {step-1})",
-        x_def, conn, element_type, element_results, interactive=interactive_hover,
-        save_path="spatial_results_rad.png"
-    )
+# Local Plot (Quick check)
+if not MODULAR_POST:
+    fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(15, 10))
+    fig.suptitle(f"Final State: Displacement & Von Mises Stress (Step {step-1})", fontweight='bold')
     
-    # 2. History Results
-    fp.plot_history_overview(
-        disp_pl, load_hist, load_target_hist, 
-        eps_p_xx_hist, sig_yy_hist, eps_p_eq_hist, sig_eq_hist, 
-        sig_1_hist, sig_2_hist, k_hist, a_hist, 
-        sigma_y, H, r,
-        save_path="history_results_rad.png"
+    verts = [x_def[conn[e][(list(range(4)) + [0]) if element_type!="quad8" else [0,4,1,5,2,6,3,7,0]]] for e in range(nel)]
+    pc_u = PolyCollection(verts, cmap='viridis', edgecolors='none', alpha=0.9)
+    pc_u.set_array(element_results["u_norm"])
+    ax2.add_collection(pc_u); plt.colorbar(pc_u, ax=ax2, label="Verschiebung [mm]")
+    ax2.set_title("Verschiebungsbetrag"); ax2.set_aspect('equal'); ax2.autoscale_view()
+    
+    pc_s = PolyCollection(verts, cmap='jet', edgecolors='none', alpha=0.9)
+    pc_s.set_array(element_results["svm"])
+    ax3.add_collection(pc_s); plt.colorbar(pc_s, ax=ax3, label="Spannung [MPa]")
+    ax3.set_title("Von Mises Spannung"); ax3.set_aspect('equal'); ax3.autoscale_view()
+    plt.show()
+
+# Modular Post-Processing (Redundant)
+if MODULAR_POST:
+    fig_spatial = fp.plot_spatial_results(
+        f"Final State (Vectorized): Displacement & Von Mises (Step {step-1})",
+        x_def, conn, element_type, element_results, interactive=interactive_hover,
+        save_path=os.path.join(script_dir, "results", "spatial_results_vec.png")
+    )
+    plt.show()
+    
+    fig_hist = fp.plot_history_overview(
+        disp_pl, load_hist, load_target_hist, eps_p_xx_hist, sig_yy_hist, eps_p_eq_hist, sig_eq_hist,
+        sig_1_hist, sig_2_hist, k_hist, a_hist, sigma_y, H, r,
+        save_path=os.path.join(script_dir, "results", "history_results_vec.png")
     )
     plt.show()
 
-print(f"Simulation complete. Duration: {sim_duration:.2f}s")
+print(f"Simulation completed in {sim_duration:.2f} seconds.")

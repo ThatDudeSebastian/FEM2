@@ -103,7 +103,7 @@
           </PropertyData>
           <PropertyData property="pr5">
             <Data format="string">-</Data>
-            <ParameterValue parameter="pa11" format="float">
+            <ParameterValue parameter="pa12" format="float">
               <Data>460000000</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Offset">0 [Pa]</Qualifier>
@@ -123,7 +123,7 @@
               <Qualifier name="Cached">True</Qualifier>
               <Qualifier name="ExtrapolationType">Projection to the Bounding Box</Qualifier>
             </ParameterValue>
-            <ParameterValue parameter="pa12" format="float">
+            <ParameterValue parameter="pa14" format="float">
               <Data>1.2e-05</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Offset">0 [C^-1]</Qualifier>
@@ -482,7 +482,7 @@
           </PropertyData>
           <PropertyData property="pr4">
             <Data format="string">-</Data>
-            <ParameterValue parameter="pa13" format="float">
+            <ParameterValue parameter="pa11" format="float">
               <Data>600</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Offset">0 [MPa]</Qualifier>
@@ -492,7 +492,7 @@
           </PropertyData>
           <PropertyData property="pr5">
             <Data format="string">-</Data>
-            <ParameterValue parameter="pa14" format="float">
+            <ParameterValue parameter="pa13" format="float">
               <Data>900</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Offset">0 [MPa]</Qualifier>
@@ -512,7 +512,7 @@
               <Qualifier name="Cached">True</Qualifier>
               <Qualifier name="ExtrapolationType">Projection to the Bounding Box</Qualifier>
             </ParameterValue>
-            <ParameterValue parameter="pa12" format="float">
+            <ParameterValue parameter="pa14" format="float">
               <Data>1.2e-05</Data>
               <Qualifier name="Variable Type">Dependent</Qualifier>
               <Qualifier name="Offset">0 [C^-1]</Qualifier>
@@ -873,11 +873,11 @@
           <Name>Tensile Yield Strength</Name>
           <Units name="Stress" />
         </ParameterDetails>
-        <ParameterDetails id="pa11">
+        <ParameterDetails id="pa12">
           <Name>Tensile Ultimate Strength</Name>
           <Units name="Stress" />
         </ParameterDetails>
-        <ParameterDetails id="pa12">
+        <ParameterDetails id="pa14">
           <Name>Coefficient of Thermal Expansion</Name>
           <Units name="InvTemp1" />
         </ParameterDetails>
@@ -888,6 +888,18 @@
         <ParameterDetails id="pa16">
           <Name>Specific Heat</Name>
           <Units name="Specific Heat Capacity" />
+        </ParameterDetails>
+        <ParameterDetails id="pa9">
+          <Name>Compressive Yield Strength</Name>
+          <Units name="Stress" />
+        </ParameterDetails>
+        <ParameterDetails id="pa11">
+          <Name>Tensile Yield Strength</Name>
+          <Units name="Stress" />
+        </ParameterDetails>
+        <ParameterDetails id="pa13">
+          <Name>Tensile Ultimate Strength</Name>
+          <Units name="Stress" />
         </ParameterDetails>
         <ParameterDetails id="pa17">
           <Name>Thermal Conductivity</Name>
@@ -945,18 +957,6 @@
         </ParameterDetails>
         <ParameterDetails id="pa32">
           <Name>Relative Permeability</Name>
-        </ParameterDetails>
-        <ParameterDetails id="pa9">
-          <Name>Compressive Yield Strength</Name>
-          <Units name="Stress" />
-        </ParameterDetails>
-        <ParameterDetails id="pa13">
-          <Name>Tensile Yield Strength</Name>
-          <Units name="Stress" />
-        </ParameterDetails>
-        <ParameterDetails id="pa14">
-          <Name>Tensile Ultimate Strength</Name>
-          <Units name="Stress" />
         </ParameterDetails>
         <ParameterDetails id="pa33">
           <Name>Yield Strength</Name>

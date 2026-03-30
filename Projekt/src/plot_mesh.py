@@ -28,7 +28,7 @@ def plot_mesh(filepath):
         print("Error: Mesh points do not have at least 2 dimensions.")
         return
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(16, 7))
     
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     legend_handles = []
@@ -163,9 +163,9 @@ def plot_mesh(filepath):
         # Add to handles for legend (ax.plot already handles this if label exists)
     
     ax.autoscale()
-    ax.set_aspect('equal')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
+    ax.set_aspect('auto')
+    ax.set_xlabel('X in mm')
+    ax.set_ylabel('Y in mm')
     
     # Update legend to include BCs
     # Handles from PC patches + plot labels
@@ -173,12 +173,15 @@ def plot_mesh(filepath):
     # Unique labels only
     from collections import OrderedDict
     by_label = OrderedDict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys(), loc='upper right', bbox_to_anchor=(1.15, 1))
+    
+    # Place legend outside right
+    ax.legend(by_label.values(), by_label.keys(), loc='center left', bbox_to_anchor=(1.02, 0.5))
     
     plt.title(f"Mesh: {os.path.basename(filepath)}\nNodes: {len(points)}")
     plt.grid(True, alpha=0.3)
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
     print("\nDisplaying plot...")
+    plt.savefig(os.path.join(script_dir, "pre_mesh.png"), dpi=300)
     plt.show()
 
 if __name__ == "__main__":

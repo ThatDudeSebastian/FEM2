@@ -38,19 +38,19 @@ element_type = 'quad8'
 
 # --- Material Parameters ---
 E = 205e9
-nu = 0.3
+nu = 0.29
 width = 0.00583
 
-sigma_y = 350e6    # Fließspannung
-H = 209e7          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
-r = 0.2            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
+sigma_y = 695e6    # Fließspannung
+H = 2091e6          # Gesamt-Verfestigungsmodul (H_iso + H_kin)
+r = 0            # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop, 2=gemischt)
 
 # --- Force ---
 F_total = -2500000.0
 
 # --- Cyclic force loading ---
 n_cycles = 2.0
-n_steps_per_cycle = 60
+n_steps_per_cycle = 30
 n_steps = n_cycles * n_steps_per_cycle
 
 F_amp = F_total          # Amplitude der zyklischen Kraft (N), z.B. -40000
