@@ -1,0 +1,39 @@
+flowchart TD
+
+A[Start] --> B[Initialisierung<br> u = 0, Zustand setzen]
+
+B --> C[Lastschritt n]
+
+C --> D[Setze Lastfaktor]
+
+D --> E[Newton-Iteration]
+
+E --> F[Element-Schleife]
+
+F --> G[Gauss-Punkt]
+
+G --> H[Dehnung berechnen]
+
+H --> I[Return Mapping<br>Materialgesetz]
+
+I --> J[Spannung + Tangente]
+
+J --> K[Elementbeiträge<br>$$K_T$$, f_int]
+
+K --> L[Assembly]
+
+L --> M[Residuum R berechnen]
+
+M --> N{Konvergenz?}
+
+N -- Ja --> O[Speichere Zustand<br>n = n+1]
+N -- Nein (Residdum übrig) --> P[Löse:<br>K_T * Δu = R]
+
+P --> Q[Update u]
+
+Q --> E
+
+O --> R{Weitere Schritte?}
+
+R -- Ja --> C
+R -- Nein --> S[Ende]

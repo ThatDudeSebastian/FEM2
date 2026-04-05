@@ -37,16 +37,16 @@ def create_wheel_mesh():
 
     # Radial divisions
     # Outer layer (R2-R_outer): Very fine
-    n_rad_outer = 20
+    n_rad_outer = 8
     # Middle layer: Transitioning middle part
-    n_rad_middle = 10
+    n_rad_middle = 8
     # Inner layer: Biased towards Hub
-    n_rad_inner = 14
+    n_rad_inner = 8
 
     # Circumferential divisions
     # n_load reduced roughly by half since symmetric
-    n_load = 15  # Nodes on half the contact strip
-    n_side = 18
+    n_load = 4  # Nodes on half the contact strip
+    n_side = 3
 
     # Create center point
     center = gmsh.model.geo.addPoint(0, 0, 0)
@@ -144,7 +144,7 @@ def create_wheel_mesh():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(script_dir, "mesh")
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "Radausschnitt_Quad8.msh")
+    output_file = os.path.join(output_dir, "Radausschnitt_Quad8_coarse_v3.msh")
     gmsh.write(output_file)
     print(f"Refined graded mesh saved to {output_file}")
 
@@ -205,15 +205,41 @@ def create_wheel_mesh():
         if "Loaded" in name:
             loaded_nodes.update(np.array(indices).astype(int).tolist())
     for n in loaded_nodes:
-        ax1.scatter(x_np[n,0]*1000, x_np[n,1]*1000, color="red", marker="x", s=15, alpha=0.8, zorder=6)
+        xn, yn = x_np[n,0]*1000, x_np[n,1]*1000
+        norm = math.sqrt(xn*xn + yn*yn)
+        vec = np.array([-xn, -yn]) / norm if norm > 0 else np.array([0, -1])
+        arrow_length = 0.08 * limit * 1000
+        gap = 0.02 * limit * 1000
+        total_dist = gap + arrow_length
+        ax1.arrow(
+            xn - total_dist * vec[0],
+            yn - total_dist * vec[1],
+            arrow_length * vec[0],
+            arrow_length * vec[1],
+            head_width=0.015 * limit * 1000,
+            head_length=0.02 * limit * 1000,
+            fc="red",
+            ec="red",
+            zorder=6,
+        )
 
-    # Highlight symmetry nodes
-    sym_nodes = set()
+    # Highlight symmetry line
+    sym_nodes = list()
     for name, indices in pt_sets.items():
         if "Symmetry" in name:
-            sym_nodes.update(np.array(indices).astype(int).tolist())
-    for n in sym_nodes:
-        ax1.scatter(x_np[n,0]*1000, x_np[n,1]*1000, color="cyan", marker="^", s=20, alpha=0.7, zorder=7)
+            sym_nodes.extend(np.array(indices).astype(int).tolist())
+    if len(sym_nodes) > 0:
+        min_y = np.min(x_np[sym_nodes, 1]) * 1000
+        max_y = np.max(x_np[sym_nodes, 1]) * 1000
+        ax1.plot([0, 0], [min_y, max_y], color="cyan", linestyle="--", lw=2, zorder=4)
+        
+    import matplotlib.lines as mlines
+    legend_elements = [
+        mlines.Line2D([0], [0], color='black', lw=1, alpha=0.5, label='FE Mesh'),
+        mlines.Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=8, alpha=0.7, label='Fixed Hub Nodes'),
+        mlines.Line2D([0], [0], color='red', marker='>', markersize=8, lw=0, label='Loaded Surface / Force direction')
+    ]
+    ax1.legend(handles=legend_elements, loc='upper right')
 
     plt.tight_layout()
     plt.show()

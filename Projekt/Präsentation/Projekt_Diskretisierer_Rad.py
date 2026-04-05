@@ -5,6 +5,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import torch
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.animation as animation
 from matplotlib.collections import PolyCollection
 import numpy as np
 import math
@@ -12,6 +13,7 @@ import os
 from tqdm import tqdm
 from mesh_utils import load_mesh, get_bcs_from_sets
 import time
+import ffmpeg
 
 # ============ SETTINGS & CONFIG ===========
 # SI-Einheiten
@@ -22,7 +24,7 @@ interactive_hover = True
 
 # --- Mesh Configuration ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
-mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Radausschnitt_Quad8.msh"))
+mesh_file = os.path.abspath(os.path.join(script_dir, "mesh", "Radausschnitt_Quad8_coarse.msh"))
 
 print(f"Loading mesh from: {mesh_file}")
 
@@ -36,7 +38,7 @@ H = 2091e6  # Gesamt-Verfestigungsmodul (H_iso + H_kin) [Pa]
 r = 0.35  # Faktor der Mischung (0=rein kinematisch, 1=rein isotrop)
 
 # --- Force ---
-F_total = -5.3e4  # Normalkraft [N]
+F_total = 5.3e4  # Normalkraft [N] (Positiv für Druckbeanspruchung)
 a_hz = 0.005143  # erste Halbachse nach Knothe [m]
 b_hz = a_hz  # zweite Halbachse nach Knothe [m]
 
@@ -51,13 +53,13 @@ def p_hertz(s):
 
 # --- Cyclic force loading ---
 n_cycles = 1
-n_steps_per_cycle = 30
+n_steps_per_cycle = 8
 n_steps = n_cycles * n_steps_per_cycle
 F_amp = F_total
-use_ramp_in = True
-n_ramp_steps = 5
+use_ramp_in = False
+n_ramp_steps = 30
 
-newton_max = 50
+newton_max = 15
 newton_tol = 1e-4
 
 # ==========================================
@@ -130,7 +132,10 @@ for n in fixed_nodes:
 sym_nodes = extract_nodes_from_sets(
     pt_sets, cell_sets, mesh_cells, ["Symmetry"]
 )
-fixed_set = set([int(x) for x in fixed_nodes])
+if not sym_nodes:
+    sym_nodes = torch.where(torch.abs(x[:, 0]) < 1e-4)[0].tolist()
+    
+fixed_set = set([int(y) for y in fixed_nodes])
 for n in sym_nodes:
     if int(n) not in fixed_set:
         drlt_bcs.append([int(n), 0, 0.0])  # U_x = 0 for symmetry
@@ -209,9 +214,10 @@ if len(contact_edges) > 0:
         neum_bcs.append([int(node), 0, float(Fxy[0])])
         neum_bcs.append([int(node), 1, float(Fxy[1])])
     load_nodes = torch.tensor(sorted(list(node_F.keys())), dtype=torch.long)
+    print(f"HERTZ: Integrated total Fy: {sum([f[2] for f in neum_bcs if f[1]==1]):.2f} N (Target: {F_total:.2f})")
 else:
     print("BC INFO: Falling back to direct force on Tread.")
-    f_total_vec = abs(F_total / len(loaded_nodes))
+    f_total_vec = F_total / len(loaded_nodes)
     for n_idx in loaded_nodes:
         vec = -x_np[n_idx] / np.linalg.norm(x_np[n_idx])
         neum_bcs.append([int(n_idx), 0, float(f_total_vec * vec[0])])
@@ -225,8 +231,32 @@ neum = torch.tensor(neum_bcs, dtype=torch.float64).reshape(-1, 3)
 # ============ SETUP VISUALIZATION =========
 # ==========================================
 limit = float(torch.max(torch.abs(x)) * 1.1)
-fig1, ax1 = plt.subplots(figsize=(16, 8))
-ax1.set_title(f"Simulation Setup\nNodes: {nnp} | Elements: {nel}", fontweight="bold")
+import matplotlib.gridspec as gridspec
+
+fig1 = plt.figure(figsize=(18, 8))
+fig1.suptitle(f"Simulation Setup\nNodes: {nnp} | Elements: {nel}", fontweight="bold")
+gs1 = gridspec.GridSpec(1, 2, width_ratios=[1.5, 1])
+ax1 = fig1.add_subplot(gs1[0])
+ax_ideal = fig1.add_subplot(gs1[1])
+
+steps_arr = np.linspace(1, max(n_steps, n_steps_per_cycle + 1), max(n_cycles, 1) * 100 + 1)
+targets = []
+for st in steps_arr:
+    targets.append((min(1, st / n_ramp_steps) if use_ramp_in else 1) * 
+        0.5 * (1.0 - math.cos(2.0 * math.pi * (st - 1) / n_steps_per_cycle))
+    * F_total / 1000.0)
+
+ax_ideal.plot(steps_arr, targets, "b-", lw=2, label="Mathematische Kurve")
+integer_steps = np.arange(1, n_steps + 1)
+integer_targets = [(min(1, st / n_ramp_steps) if use_ramp_in else 1) * 
+    0.5 * (1.0 - math.cos(2.0 * math.pi * (st - 1) / n_steps_per_cycle))
+ * F_total / 1000.0 for st in integer_steps]
+ax_ideal.plot(integer_steps, integer_targets, "ro", markersize=6, label="Abzufahrende Steps")
+ax_ideal.legend()
+ax_ideal.set_title("Geplante Lastkurve (Pulsierend)")
+ax_ideal.set_xlabel("Solver Step")
+ax_ideal.set_ylabel("Force [kN]")
+ax_ideal.grid(True)
 if nen == 8:
     idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
     for e in range(nel):
@@ -258,17 +288,10 @@ for n in fixed_nodes:
         zorder=5,
     )
 
-if 'sym_nodes' in locals():
-    for n in sym_nodes:
-        ax1.scatter(
-            x[n, 0] * 1000,
-            x[n, 1] * 1000,
-            color="cyan",
-            marker="^",
-            s=20,
-            alpha=0.7,
-            zorder=5,
-        )
+if 'sym_nodes' in locals() and len(sym_nodes) > 0:
+    min_y = torch.min(x[sym_nodes, 1]).item() * 1000
+    max_y = torch.max(x[sym_nodes, 1]).item() * 1000
+    ax1.plot([0, 0], [min_y, max_y], color="cyan", linestyle="--", lw=2, zorder=4)
 
 # Calculate force magnitudes to draw Hertzian ellipse profile with arrows
 node_forces_mag = {}
@@ -310,6 +333,42 @@ ax1.set_aspect("auto")
 # ax1.grid(False, alpha=0.3)
 ax1.set_xlabel("x [mm]", fontweight="bold")
 ax1.set_ylabel("y [mm]", fontweight="bold")
+
+import matplotlib.lines as mlines
+legend_elements = [
+    mlines.Line2D([0], [0], color='black', lw=1, alpha=0.5, label='FE Mesh'),
+    mlines.Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=8, alpha=0.7, label='Fixed Hub Nodes'),
+    mlines.Line2D([0], [0], color='red', marker='>', markersize=8, lw=0, label=f'Hertzian Load (F_max: {max_force:.1f} N)')
+]
+ax1.legend(handles=legend_elements, loc='upper right')
+
+# RECOMPOSITION: Plot Mirrored Setup for confirmation
+for n in fixed_nodes:
+    ax1.scatter(-x[n, 0] * 1000, x[n, 1] * 1000, color="green", marker="o", s=15, alpha=0.2, zorder=5)
+
+for n, f_mag in node_forces_mag.items():
+    if f_mag < 1e-6: continue
+    xn, yn = x_np[n] * 1000
+    vec = -x_np[n] / np.linalg.norm(x_np[n])
+    scale = (f_mag / max_force)
+    arrow_length = scale * (0.08 * limit * 1000)
+    draw_scale = max(scale, 0.1)
+    gap = 0.02 * limit * 1000
+    total_dist = gap + arrow_length
+    
+    # Mirror Arrow
+    ax1.arrow(-xn + total_dist * vec[0], yn - total_dist * vec[1], -arrow_length * vec[0], arrow_length * vec[1],
+              head_width=0.015 * limit * 1000 * draw_scale, head_length=0.02 * limit * 1000 * draw_scale,
+              fc="red", ec="red", alpha=0.4, zorder=6)
+
+# Mirror Mesh in Setup
+if nen == 8:
+    idx = [0, 4, 1, 5, 2, 6, 3, 7, 0]
+    for e in range(nel):
+        ax1.plot(-x[conn[e][idx], 0] * 1000, x[conn[e][idx], 1] * 1000, color="black", lw=0.4, alpha=0.1)
+else:
+    for e in range(nel):
+        ax1.plot(-x[torch.cat([conn[e], conn[e][:1]]), 0] * 1000, x[torch.cat([conn[e], conn[e][:1]]), 1] * 1000, color="black", lw=0.4, alpha=0.1)
 try:
     fig1.savefig(os.path.join(script_dir, "setup_mesh.png"), dpi=300)
 except Exception as e:
@@ -520,11 +579,17 @@ free_dofs = torch.nonzero(
 )[:, 0]
 
 disp_pl, load_hist, load_target_hist, fac_used_hist = [], [], [], []
+step_float_hist = []
+history_u_steps = [u.clone()]
+history_state_steps = [clone_state_gp(state_gp)]
 eps_p_xx_hist, sig_yy_hist, eps_p_eq_hist, sig_eq_hist = [], [], [], []
 k_hist, a_hist, sig_1_hist, sig_2_hist = [], [], [], []
 k_hist, a_hist, sig_1_hist, sig_2_hist = [], [], [], []
 fac_conv, fac_scale, step = 0.0, 1.0, 1
 sim_start_time = time.time()
+u_max_state = None
+state_gp_max = None
+fac_max_seen = -1e15
 
 # --- Tracking Variables ---
 track_el = None
@@ -545,11 +610,12 @@ while step <= n_steps:
     pbar.refresh()
 
     # Calculate target load factor
-    fac_target = (min(1, step / n_ramp_steps) if use_ramp_in else 1) * abs(
-        math.sin(2 * math.pi * (step - 1) / n_steps_per_cycle)
+    fac_target = (min(1, step / n_ramp_steps) if use_ramp_in else 1) * 0.5 * (
+        1.0 - math.cos(2.0 * math.pi * (step - 1) / n_steps_per_cycle)
     )
     print(f"\nSTEP {step}/{n_steps} | Target Load Factor: {fac_target:.4f}")
 
+    fac_start_step = fac_conv
     state_gp_old, u_old, cutbacks = clone_state_gp(state_gp), u.clone(), 0
 
     while True:
@@ -563,6 +629,7 @@ while step <= n_steps:
             f_ext[int(bc[0]) * 2 + int(bc[1])] = fac * bc[2]
 
         u, converged = u_old.clone(), False
+        last_rel = 1e15 # For divergence check
 
         # Iteration-level storage (only cloned once per substep, NOT per iteration)
         state_gp_current_substep = clone_state_gp(state_gp_old)
@@ -678,8 +745,17 @@ while step <= n_steps:
             Rf = R[free_dofs]
             fext_norm = torch.norm(f_ext[free_dofs])
             rel = float(torch.norm(Rf)) / max(float(fext_norm), 1.0)
-
+            
             print(f"    it {it:2d}: rel={rel:.3e}, ||Rf||={torch.norm(Rf):.3e}")
+
+            # --- Divergence Check ---
+            if it > 2 and rel > last_rel * 1.5:
+                print(f"      -> Divergence detected (rel {rel:.1e} > last {last_rel:.1e}). Cutting back...")
+                break
+            if rel > 1e10: # Absolute blowout
+                print(f"      -> Residual exploded. Cutting back...")
+                break
+            last_rel = rel
 
             if rel < newton_tol:
                 state_gp, converged = state_gp_current_substep, True
@@ -713,6 +789,17 @@ while step <= n_steps:
                         # Should not happen if logic is correct
                         pass
 
+                # Capture Maximum Load State for later plotting
+                if fac > fac_max_seen:
+                    fac_max_seen = fac
+                    u_max_state = u.clone()
+                    state_gp_max = clone_state_gp(state_gp)
+
+                if abs(fac_target - fac_start_step) > 1e-9:
+                    progress = (fac - fac_start_step) / (fac_target - fac_start_step)
+                else:
+                    progress = 1.0
+                step_float_hist.append(float((step - 1) + progress))
                 load_hist.append(float(fac * F_total))
                 # Tracking Element Displacement (approximate via node 0 of element?)
                 if track_el is not None:
@@ -789,6 +876,10 @@ while step <= n_steps:
         if converged:
             fac_conv = fac
             state_gp_old, u_old = clone_state_gp(state_gp), u.clone()
+            
+            history_u_steps.append(u.clone())
+            history_state_steps.append(clone_state_gp(state_gp))
+
             if abs(fac_target - fac_conv) < 1e-3:
                 step += 1
                 break
@@ -808,47 +899,67 @@ sim_duration = time.time() - sim_start_time
 # ==========================================
 # ============ POST & PLOT =============
 # ==========================================
-print("\nPost-processing spatial results...")
-element_results = {"u_norm": np.zeros(nel), "svm": np.zeros(nel)}
-u_np = u.detach().numpy().flatten()
-x_def_mm = (x_np + u_np.reshape(-1, 2)) * 1000
+print("\nPost-processing spatial results for animation frames...")
+anim_verts_all = []
+anim_u_norm = []
+anim_svm = []
 
-for el in range(nel):
-    indices = element_dofs[el]
-    ue = u[indices].reshape(-1, 2).t()
-    xe = x[conn[el]].t()
-    svm_el, u_norm_el = 0.0, 0.0
-    for q in range(nqp):
-        N, Gsh = get_shape_data(qpt[q], nen)
-        Je = xe @ Gsh
-        G = torch.linalg.solve(Je.T, Gsh.T).T
-        eps = 0.5 * (ue @ G + (ue @ G).t())
-        sig, _, _ = von_mises_return(eps, state_gp[el][q])
-        s11, s22, s12 = float(sig[0, 0]), float(sig[1, 1]), float(sig[0, 1])
-        s33 = float(
-            sig[2, 2]
-        )  # Plane Strain: σ₃₃ kommt aus 3D-Materialmodell, NICHT ν(σ₁₁+σ₂₂)
-        tr = (s11 + s22 + s33) / 3.0
-        sd = torch.tensor([[s11 - tr, s12, 0], [s12, s22 - tr, 0], [0, 0, s33 - tr]])
-        svm_el += math.sqrt(1.5 * torch.sum(sd * sd).item())
-        u_vals = (ue @ N).detach().numpy()
-        u_norm_el += np.linalg.norm(u_vals)
-    element_results["svm"][el] = svm_el / nqp / 1e6  # MPa
-    element_results["u_norm"][el] = (u_norm_el / nqp) * 1000  # mm
+print(f"Processing {len(history_u_steps)} animation frames...")
+for f_idx, (u_hist, st_hist) in enumerate(tqdm(zip(history_u_steps, history_state_steps), total=len(history_u_steps), desc="Anim Frames")):
+    u_np_h = u_hist.detach().numpy().flatten()
+    x_def_mm_h = (x_np + u_np_h.reshape(-1, 2)) * 1000
+    
+    verts_h_orig = [x_def_mm_h[conn[e][idx if element_type == "quad8" else [0, 1, 2, 3, 0]]] for e in range(nel)]
+    verts_h_mirr = []
+    for v in verts_h_orig:
+        vm = v.copy()
+        vm[:, 0] = -vm[:, 0]
+        verts_h_mirr.append(vm)
+    
+    anim_verts_all.append(verts_h_orig + verts_h_mirr)
+    
+    elem_svm = np.zeros(nel)
+    elem_u = np.zeros(nel)
+    for el in range(nel):
+        indices = element_dofs[el]
+        ue = u_hist[indices].reshape(-1, 2).t()
+        xe = x[conn[el]].t()
+        svm_el, u_norm_el = 0.0, 0.0
+        for q in range(nqp):
+            N, Gsh = get_shape_data(qpt[q], nen)
+            Je = xe @ Gsh
+            G = torch.linalg.solve(Je.T, Gsh.T).T
+            eps = 0.5 * (ue @ G + (ue @ G).t())
+            sig, _, _ = von_mises_return(eps, st_hist[el][q])
+            s11, s22, s12 = float(sig[0, 0]), float(sig[1, 1]), float(sig[0, 1])
+            s33 = float(sig[2, 2])
+            tr = (s11 + s22 + s33) / 3.0
+            sd = torch.tensor([[s11 - tr, s12, 0], [s12, s22 - tr, 0], [0, 0, s33 - tr]])
+            svm_el += math.sqrt(1.5 * torch.sum(sd * sd).item())
+            u_vals = (ue @ N).detach().numpy()
+            u_norm_el += np.linalg.norm(u_vals)
+        elem_svm[el] = svm_el / nqp / 1e6  # MPa
+        elem_u[el] = (u_norm_el / nqp) * 1000  # mm
+    
+    anim_svm.append(np.concatenate([elem_svm, elem_svm]))
+    anim_u_norm.append(np.concatenate([elem_u, elem_u]))
+
+element_results = {"u_norm": anim_u_norm[-1][:nel], "svm": anim_svm[-1][:nel]}
+u_np = history_u_steps[-1].detach().numpy().flatten()
+x_def_mm = (x_np + u_np.reshape(-1, 2)) * 1000
 
 # Figure 1: Displacement Result
 fig_u, ax2 = plt.subplots(figsize=(14, 7))
 fig_u.suptitle(f"Final State: Displacement (Step {step-1})", fontweight="bold")
 
-verts_mm = [
-    x_def_mm[conn[e][idx if element_type == "quad8" else [0, 1, 2, 3, 0]]]
-    for e in range(nel)
-]
-pc_u = PolyCollection(verts_mm, cmap="viridis", edgecolors="none", alpha=0.9)
-pc_u.set_array(element_results["u_norm"])
+verts_all = anim_verts_all[-1]
+results_all = anim_u_norm[-1]
+
+pc_u = PolyCollection(verts_all, cmap="viridis", edgecolors="none", alpha=0.9)
+pc_u.set_array(results_all)
 ax2.add_collection(pc_u)
 plt.colorbar(pc_u, ax=ax2, label="Verschiebung [mm]")
-ax2.set_title("Verschiebungsbetrag", fontweight="bold")
+ax2.set_title("Verschiebungsbetrag (Recomposed)", fontweight="bold")
 ax2.set_aspect("auto")
 ax2.autoscale_view()
 ax2.set_xlabel("x [mm]", fontweight="bold")
@@ -858,11 +969,12 @@ ax2.set_ylabel("y [mm]", fontweight="bold")
 fig_s, ax3 = plt.subplots(figsize=(14, 7))
 fig_s.suptitle(f"Final State: Von Mises Stress (Step {step-1})", fontweight="bold")
 
-pc_s = PolyCollection(verts_mm, cmap="jet", edgecolors="none", alpha=0.9)
-pc_s.set_array(element_results["svm"])
+results_s_all = anim_svm[-1]
+pc_s = PolyCollection(verts_all, cmap="jet", edgecolors="none", alpha=0.9)
+pc_s.set_array(results_s_all)
 ax3.add_collection(pc_s)
 plt.colorbar(pc_s, ax=ax3, label="Spannung [MPa]")
-ax3.set_title("Von Mises Spannung", fontweight="bold")
+ax3.set_title("Von Mises Spannung (Recomposed)", fontweight="bold")
 ax3.set_aspect("auto")
 ax3.autoscale_view()
 ax3.set_xlabel("x [mm]", fontweight="bold")
@@ -897,9 +1009,11 @@ if interactive_hover:
                 cont, ind = pc.contains(event)
                 if cont:
                     i = ind["ind"][0]
+                    # Map back to original element index if mirrored
+                    i_orig = i % nel
                     b = pc.get_paths()[i].get_extents()
                     ann.xy = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]
-                    ann.set_text(f"Elem: {i}\n{element_results[key][i]:.2f} {unit}")
+                    ann.set_text(f"Elem: {i_orig}\n{element_results[key][i_orig]:.2f} {unit}")
                     ann.set_visible(True)
                     f.canvas.draw_idle()
                     return
@@ -908,6 +1022,34 @@ if interactive_hover:
 
     fig_u.canvas.mpl_connect("motion_notify_event", hover)
     fig_s.canvas.mpl_connect("motion_notify_event", hover)
+
+# Figure: Maximalzustand (Max Stress)
+if len(load_hist) > 0:
+    # Finde den Index der maximalen Last im Verlauf
+    # Da history_u_steps mit dem Null-Zustand beginnt, ist der Index in den anim_ Listen um 1 verschoben
+    max_load_idx = np.argmax(np.abs(load_hist)) + 1
+    max_load_val = load_hist[max_load_idx - 1]
+    
+    fig_max, ax_max = plt.subplots(figsize=(14, 7))
+    fig_max.suptitle(f"Maximalzustand: Von Mises Spannung bei Volllast", fontweight="bold", fontsize=14)
+    
+    verts_max = anim_verts_all[max_load_idx]
+    svm_max = anim_svm[max_load_idx]
+    
+    pc_max = PolyCollection(verts_max, cmap="jet", edgecolors="none", alpha=0.9)
+    pc_max.set_array(svm_max)
+    ax_max.add_collection(pc_max)
+    plt.colorbar(pc_max, ax=ax_max, label="Spannung [MPa]")
+    
+    ax_max.set_title(f"Last: {max_load_val/1000:.1f} kN", fontweight="bold")
+    ax_max.set_aspect("auto")
+    ax_max.autoscale_view()
+    ax_max.set_xlabel("x [mm]", fontweight="bold")
+    ax_max.set_ylabel("y [mm]", fontweight="bold")
+    
+    try:
+        fig_max.savefig(os.path.join(script_dir, "maximal_state_stress.png"), dpi=300)
+    except: pass
 
 # Figure 2: History Analysis
 fig_hist = plt.figure(figsize=(14, 10))
@@ -1033,8 +1175,8 @@ if len(a_hist) > 0:
             sig_1_hist[-1], sig_2_hist[-1], "co", markersize=6, label="Current State"
         )
 
-    plt.xlabel(r"$\sigma_{xx}$ [MPa]")
-    plt.ylabel(r"$\sigma_{yy}$ [MPa]")
+    plt.xlabel(r"$\sigma_{1}$ [MPa]")
+    plt.ylabel(r"$\sigma_{2}$ [MPa]")
     plt.title(f"Fließfläche im HS-Raum (r={r:.2f})")
     plt.legend()
     plt.grid(True)
@@ -1064,6 +1206,140 @@ try:
     fig_hist.savefig(os.path.join(script_dir, "history_results.png"), dpi=300)
 except Exception as e:
     print(f"Error saving results: {e}")
+
+# Figure 5: Substep Resolution
+fig_substeps, ax_sub = plt.subplots(figsize=(10, 6))
+ideal_steps = np.linspace(1, max(n_steps, n_steps_per_cycle + 1), max(n_cycles, 1) * 100 + 1)
+ideal_targets = []
+for st_f in ideal_steps:
+    ideal_targets.append((min(1, st_f / n_ramp_steps) if use_ramp_in else 1) * 
+        0.5 * (1.0 - math.cos(2.0 * math.pi * (st_f - 1) / n_steps_per_cycle))
+    * F_total / 1000.0)
+
+ax_sub.plot(ideal_steps, ideal_targets, "k--", lw=2, alpha=0.5, label="Ideale Sinuskurve (Mathematisch)")
+integer_steps_sub = np.arange(1, n_steps + 1)
+integer_targets_sub = [(min(1, st / n_ramp_steps) if use_ramp_in else 1) * 
+    0.5 * (1.0 - math.cos(2.0 * math.pi * (st - 1) / n_steps_per_cycle))
+ * F_total / 1000.0 for st in integer_steps_sub]
+ax_sub.plot(integer_steps_sub, integer_targets_sub, "ro", markersize=8, label="Abzufahrende Steps (Targets)")
+ax_sub.plot(step_float_hist, np.array(load_hist) / 1000.0, "bx", markersize=6, markeredgewidth=1.5, label="Gerechnete Iterationen (Substeps)")
+ax_sub.set_title("Visualisierung der berechneten Substeps auf der Lastkurve")
+ax_sub.set_xlabel("Globaler Step (interpoliert)")
+ax_sub.set_ylabel("Kraft [kN]")
+ax_sub.grid(True)
+ax_sub.legend()
+try:
+    fig_substeps.savefig(os.path.join(script_dir, "substep_resolution.png"), dpi=300)
+except Exception as e:
+    pass
+
+# ==========================================
+# ============ ANIMATION EXPORT ============
+# ==========================================
+print("\nGenerating Animation...")
+try:
+    Writer = animation.writers['ffmpeg']
+    writer = Writer(fps=1, metadata=dict(artist='Antigravity'), bitrate=1800)
+    has_ffmpeg = True
+except Exception:
+    print("FFMpeg not found, will fallback to GIF via PillowWriter.")
+    has_ffmpeg = False
+
+import matplotlib.gridspec as gridspec
+
+fig_anim = plt.figure(figsize=(18, 8))
+fig_anim.suptitle("FEM Simulation - Loading Cycle", fontweight="bold")
+
+gs = gridspec.GridSpec(3, 2, width_ratios=[1.5, 1])
+ax_anim = fig_anim.add_subplot(gs[:, 0])
+ax_curve1 = fig_anim.add_subplot(gs[0, 1])
+ax_curve2 = fig_anim.add_subplot(gs[1, 1])
+ax_curve3 = fig_anim.add_subplot(gs[2, 1])
+
+pc_anim = PolyCollection(anim_verts_all[-1], cmap="jet", edgecolors="none", alpha=0.9)
+pc_anim.set_array(anim_svm[-1])
+ax_anim.add_collection(pc_anim)
+max_svm_all = max([np.max(st) for st in anim_svm]) if len(anim_svm) > 0 else 1.0
+pc_anim.set_clim(0, max_svm_all)
+plt.colorbar(pc_anim, ax=ax_anim, label="Spannung [MPa]")
+ax_anim.set_aspect("auto")
+ax_anim.autoscale_view()
+ax_anim.set_xlim(ax_anim.get_xlim())
+ax_anim.set_ylim(ax_anim.get_ylim())
+ax_anim.set_xlabel("x [mm]", fontweight="bold")
+ax_anim.set_ylabel("y [mm]", fontweight="bold")
+ax_anim.set_title("Von Mises Spannung")
+
+# Restore initial frame
+pc_anim.set_verts(anim_verts_all[0])
+pc_anim.set_array(anim_svm[0])
+
+# Prepare Curve Data (Pad first frame with 0 to match length)
+anim_load = [0.0] + [val / 1000.0 for val in load_hist]
+anim_target_load = [0.0] + [val / 1000.0 for val in load_target_hist]
+anim_disp = [0.0] + disp_pl
+anim_eps = [0.0] + eps_p_eq_hist
+anim_sig = [0.0] + sig_eq_hist
+anim_steps = np.arange(len(anim_load))
+
+# Load vs Substeps Plot (Sine Curve progression)
+ax_curve1.plot(anim_steps, anim_target_load, "k--", alpha=0.4, label="Target Curve")
+ax_curve1.plot(anim_steps, anim_load, "b-", alpha=0.3, label="Actual Load")
+line_curve1, = ax_curve1.plot([anim_steps[0]], [anim_load[0]], "bo", label="Current")
+ax_curve1.set_title("Load Progression (Sine Curve)")
+ax_curve1.set_xlabel("Solver Substeps")
+ax_curve1.set_ylabel("Force [kN]")
+ax_curve1.grid(True)
+ax_curve1.legend(loc="upper right", fontsize=8)
+
+# Force-Displacement Plot
+ax_curve2.plot(anim_disp, anim_load, "r-", alpha=0.3, label="History")
+line_curve2, = ax_curve2.plot([anim_disp[0]], [anim_load[0]], "ro")
+ax_curve2.set_title("Force-Displacement")
+ax_curve2.set_xlabel("U_y [m]")
+ax_curve2.set_ylabel("Force [kN]")
+ax_curve2.grid(True)
+
+# Stress-Strain Plot
+ax_curve3.plot(anim_eps, anim_sig, "g-", alpha=0.3, label="Path")
+line_curve3, = ax_curve3.plot([anim_eps[0]], [anim_sig[0]], "go")
+ax_curve3.set_title("Equivalent Stress vs. Plastic Strain (Hotspot)")
+ax_curve3.set_xlabel(r"$\varepsilon^p_\mathrm{eq}$ [-]")
+ax_curve3.set_ylabel(r"$\sigma_\mathrm{eq}$ [MPa]")
+ax_curve3.grid(True)
+plt.tight_layout()
+
+def update_anim(frame_idx):
+    pc_anim.set_verts(anim_verts_all[frame_idx])
+    pc_anim.set_array(anim_svm[frame_idx])
+    
+    if frame_idx < len(anim_disp):
+        line_curve1.set_data([anim_steps[frame_idx]], [anim_load[frame_idx]])
+        line_curve2.set_data([anim_disp[frame_idx]], [anim_load[frame_idx]])
+    if frame_idx < len(anim_eps):
+        line_curve3.set_data([anim_eps[frame_idx]], [anim_sig[frame_idx]])
+        
+    return pc_anim, line_curve1, line_curve2, line_curve3
+
+ani = animation.FuncAnimation(fig_anim, update_anim, frames=len(anim_verts_all), blit=True)
+
+try:
+    if has_ffmpeg:
+        anim_file = os.path.join(script_dir, "stress_animation.mp4")
+        ani.save(anim_file, writer=writer)
+        print(f"Saved MP4 animation to {anim_file}")
+    else:
+        raise Exception("Force fallback")
+except Exception as e:
+    if has_ffmpeg: print(f"Error saving mp4: {e}. Falling back to gif...")
+    from matplotlib.animation import PillowWriter
+    anim_file_gif = os.path.join(script_dir, "stress_animation.gif")
+    try:
+        ani.save(anim_file_gif, writer=PillowWriter(fps=1))
+        print(f"Saved GIF animation to {anim_file_gif}")
+    except Exception as e2:
+        print(f"Error saving gif: {e2}")
+
 plt.show()
 
 print(f"Simulation complete. Duration: {sim_duration:.2f}s")
